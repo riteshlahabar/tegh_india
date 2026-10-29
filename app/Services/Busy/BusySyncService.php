@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\BusySyncLog;
 use App\Models\Invoice;
 use App\Models\Party;
+use App\Support\BusyCompanies;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
@@ -16,18 +17,114 @@ class BusySyncService
     /** @var array<string, Party> */
     private array $partyCache = [];
 
-    public function __construct(private BusyApiClient $client) {}
+    /**
+     * The company currently being synced. Every read and write in this service is
+     * scoped to it -- ERP codes, party codes and invoice numbers repeat across
+     * companies, so an unscoped lookup would match another company's row and
+     * overwrite it.
+     */
+    private string $company;
+
+    /** @var BusyApiClient Bound to {@see $company} for the duration of one pass. */
+    private BusyApiClient $client;
+
+    public function __construct(private BusyApiClient $baseClient)
+    {
+        $this->company = BusyCompanies::default();
+        $this->client = $baseClient;
+    }
+
+    /**
+     * Syncs every company that has a complete credential pair.
+     *
+     * One company failing does not abandon the rest: each is logged separately and
+     * the errors are collected, so a wrong Pune password still lets Mumbai and
+     * Gujarat through. The run only throws if nothing succeeded at all.
+     *
+     * @return array{parties_upserted: int, invoices_upserted: int, invoices_closed: int, companies: array<string, array<string, mixed>>, log: ?BusySyncLog}
+     */
+    public function sync(string $triggeredBy = 'system', ?string $from = null, ?string $to = null, ?string $company = null): array
+    {
+        $companies = $company !== null
+            ? [BusyCompanies::resolve($company)]
+            : BusyCompanies::configured();
+
+        if ($companies === []) {
+            throw new BusyApiException('No Apna Bazar company has credentials configured. Add them under Settings.');
+        }
+
+        $totals = ['parties_upserted' => 0, 'invoices_upserted' => 0, 'invoices_closed' => 0];
+        $perCompany = [];
+        $errors = [];
+        $lastLog = null;
+
+        foreach ($companies as $slug) {
+            try {
+                $result = $this->syncCompany($slug, $triggeredBy, $from, $to);
+
+                foreach ($totals as $key => $value) {
+                    $totals[$key] = $value + $result[$key];
+                }
+                $perCompany[$slug] = $result;
+                $lastLog = $result['log'];
+            } catch (\Throwable $e) {
+                $errors[$slug] = $e->getMessage();
+                $perCompany[$slug] = [
+                    'parties_upserted' => 0,
+                    'invoices_upserted' => 0,
+                    'invoices_closed' => 0,
+                    'error' => $e->getMessage(),
+                    'log' => null,
+                ];
+                Log::error('BUSY sync failed', ['company' => $slug, 'exception' => $e]);
+            }
+        }
+
+        $succeeded = count($companies) - count($errors);
+
+        AppSetting::setValue('busy_status', match (true) {
+            $errors === [] => 'Connected',
+            $succeeded > 0 => 'Partly connected',
+            default => 'Error',
+        });
+
+        if ($succeeded > 0) {
+            AppSetting::setValue('busy_last_sync', now()->format('d M Y – h:i A'));
+        }
+
+        if ($succeeded === 0) {
+            throw new BusyApiException('BUSY sync failed: '.implode(' | ', array_map(
+                fn (string $slug, string $message) => BusyCompanies::label($slug).': '.$message,
+                array_keys($errors),
+                $errors,
+            )));
+        }
+
+        return $totals + [
+            'companies' => $perCompany,
+            'errors' => $errors,
+            'log' => $lastLog,
+        ];
+    }
 
     /**
      * @return array{parties_upserted: int, invoices_upserted: int, invoices_closed: int, log: BusySyncLog}
      */
-    public function sync(string $triggeredBy = 'system', ?string $from = null, ?string $to = null): array
+    private function syncCompany(string $company, string $triggeredBy, ?string $from, ?string $to): array
     {
+        $this->company = BusyCompanies::resolve($company);
+        $this->client = $this->baseClient->forCompany($this->company);
+
+        // Party codes repeat across companies, so a cache warmed for one company
+        // would resolve another company's rows.
+        $this->partyCache = [];
+
         $from = $from ?: $this->financialYearStart()->toDateString();
         $to = $to ?: now('Asia/Kolkata')->toDateString();
 
         $log = BusySyncLog::create([
             'triggered_by' => $triggeredBy,
+            'company' => $this->company,
             'status' => 'running',
             'started_at' => now(),
         ]);
@@ -47,9 +144,6 @@ class BusySyncService
                 'finished_at' => now(),
             ]);
 
-            AppSetting::setValue('busy_status', 'Connected');
-            AppSetting::setValue('busy_last_sync', now()->format('d M Y – h:i A'));
-
             return [
                 'parties_upserted' => $partiesUpserted,
                 'invoices_upserted' => $invoicesUpserted,
@@ -62,8 +156,6 @@ class BusySyncService
                 'error_message' => $e->getMessage(),
                 'finished_at' => now(),
             ]);
-            AppSetting::setValue('busy_status', 'Error');
-            Log::error('BUSY sync failed', ['exception' => $e]);
 
             throw $e instanceof BusyApiException
                 ? $e
@@ -235,6 +327,7 @@ class BusySyncService
 
         $attributes = [
             'name' => $name,
+            'company' => $this->company,
             'code' => $this->uniquePartyCode($code, $party?->id),
             'busy_party_id' => $busyId,
             'contact_person' => BusyPayload::pick($row, ['Contact', 'Print_name', 'PrintName', 'ContactPerson', 'contact_person'], $party?->contact_person),
@@ -353,6 +446,7 @@ class BusySyncService
 
         $attributes = [
             'party_id' => $party->id,
+            'company' => $this->company,
             'invoice_no' => $this->uniqueInvoiceNo($invoiceNo, $invoice?->id),
             'busy_invoice_id' => $busyId,
             'invoice_date' => $invoiceDate,
@@ -405,13 +499,17 @@ class BusySyncService
         return $invoiceNo;
     }
 
+    /**
+     * Every party read in this service goes through here, so the company filter
+     * applied once covers lookups, uniqueness checks and the cache warm-up alike.
+     */
     private function parties(): Builder
     {
-        return Party::withoutGlobalScope('busy_source');
+        return Party::withoutGlobalScope('busy_source')->where('company', $this->company);
     }
 
     private function invoices(): Builder
     {
-        return Invoice::withoutGlobalScope('busy_source');
+        return Invoice::withoutGlobalScope('busy_source')->where('company', $this->company);
     }
 }

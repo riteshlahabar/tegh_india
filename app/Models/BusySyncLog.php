@@ -8,6 +8,7 @@ class BusySyncLog extends Model
 {
     protected $fillable = [
         'triggered_by',
+        'company',
         'status',
         'parties_upserted',
         'invoices_upserted',

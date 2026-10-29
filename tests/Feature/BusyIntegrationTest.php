@@ -26,11 +26,22 @@ class BusyIntegrationTest extends TestCase
             'busy.base_url' => 'http://api.apnabazarapp.in/WebAPI/V2',
             'busy.timeout' => 10,
             'busy.default_company' => 'mumbai',
+            // Only Mumbai is configured by default, matching the live state before
+            // the other two credentials are entered. Tests that need a second
+            // company opt in with configureGujarat().
             'busy.companies' => [
                 'mumbai' => ['label' => 'Mumbai', 'username' => 'tegh-user', 'password' => 'secret'],
-                'gujarat' => ['label' => 'Gujarat', 'username' => 'tegh-guj', 'password' => 'guj-secret'],
+                'gujarat' => ['label' => 'Gujarat', 'username' => '', 'password' => ''],
                 'pune' => ['label' => 'Pune', 'username' => '', 'password' => ''],
             ],
+        ]);
+    }
+
+    private function configureGujarat(): void
+    {
+        config([
+            'busy.companies.gujarat.username' => 'tegh-guj',
+            'busy.companies.gujarat.password' => 'guj-secret',
         ]);
     }
 
@@ -85,6 +96,7 @@ class BusyIntegrationTest extends TestCase
 
     public function test_client_sends_the_credentials_of_the_company_it_is_bound_to(): void
     {
+        $this->configureGujarat();
         Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
 
         app(BusyApiClient::class)->forCompany('gujarat')->getOutstanding();
@@ -95,6 +107,7 @@ class BusyIntegrationTest extends TestCase
 
     public function test_binding_a_company_does_not_leak_into_the_shared_client(): void
     {
+        $this->configureGujarat();
         Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
 
         $client = app(BusyApiClient::class);
@@ -140,12 +153,14 @@ class BusyIntegrationTest extends TestCase
         $assignee = User::factory()->create(['role' => 'telecaller']);
         $party = Party::create([
             'name' => 'Old Name',
+            'company' => 'mumbai',
             'code' => 'TC-2000',
             'busy_party_id' => 'P-1001',
             'assigned_to' => $assignee->id,
         ]);
         Invoice::create([
             'party_id' => $party->id,
+            'company' => 'mumbai',
             'invoice_no' => 'INV-2500',
             'busy_invoice_id' => 'INV-UID-2500',
             'invoice_date' => '2026-07-01',
@@ -175,11 +190,13 @@ class BusyIntegrationTest extends TestCase
     {
         $party = Party::create([
             'name' => 'Paid Party',
+            'company' => 'mumbai',
             'code' => 'TC-PAID',
             'busy_party_id' => 'P-1001',
         ]);
         Invoice::create([
             'party_id' => $party->id,
+            'company' => 'mumbai',
             'invoice_no' => 'INV-OLD',
             'busy_invoice_id' => 'INV-OLD-1',
             'invoice_date' => '2026-01-01',
@@ -307,6 +324,119 @@ class BusyIntegrationTest extends TestCase
 
         // Ensure TCIPL/9999/26-27 was NOT created as a zombie $0 invoice
         $this->assertNull(Invoice::where('invoice_no', 'TCIPL/9999/26-27')->first());
+    }
+
+    public function test_sync_visits_every_configured_company(): void
+    {
+        $this->configureGujarat();
+        Http::fake($this->perCompanyFake());
+
+        $summary = app(BusySyncService::class)->sync('test');
+
+        $this->assertSame(['mumbai', 'gujarat'], array_keys($summary['companies']));
+        $this->assertSame([], $summary['errors']);
+
+        $this->assertDatabaseHas('parties', ['busy_party_id' => 'P-1001', 'company' => 'mumbai']);
+        $this->assertDatabaseHas('parties', ['busy_party_id' => 'P-1001', 'company' => 'gujarat']);
+    }
+
+    public function test_the_same_erp_code_in_two_companies_stays_two_parties(): void
+    {
+        $this->configureGujarat();
+        Http::fake($this->perCompanyFake());
+
+        app(BusySyncService::class)->sync('test');
+
+        // ERP 153 is POLYCAB in Mumbai and YCube in Gujarat on the live data. One
+        // row winning would silently reattach the other company's invoices.
+        $parties = Party::withoutGlobalScope('busy_source')->where('busy_party_id', 'P-1001')->get();
+
+        $this->assertCount(2, $parties);
+        $this->assertEqualsCanonicalizing(
+            ['ABC Electricals Pvt Ltd', 'Gujarat Cables LLP'],
+            $parties->pluck('name')->all(),
+        );
+    }
+
+    public function test_syncing_one_company_does_not_close_another_companys_invoices(): void
+    {
+        $this->configureGujarat();
+        $mumbai = Party::create(['name' => 'Mumbai Party', 'company' => 'mumbai', 'code' => 'M-1', 'busy_party_id' => 'P-1001']);
+        $untouched = Invoice::create([
+            'party_id' => $mumbai->id,
+            'company' => 'mumbai',
+            'invoice_no' => 'MUM-OPEN',
+            'busy_invoice_id' => 'MUM-OPEN-1',
+            'invoice_date' => '2026-01-01',
+            'due_date' => '2026-01-31',
+            'invoice_amount' => 90000,
+            'received_amount' => 0,
+            'outstanding' => 90000,
+        ]);
+
+        Http::fake($this->perCompanyFake());
+
+        app(BusySyncService::class)->sync('test', company: 'gujarat');
+
+        // closeMissingOutstanding() pays off invoices absent from the outstanding
+        // response. Unscoped, Gujarat's response would close every Mumbai invoice.
+        $untouched->refresh();
+        $this->assertEquals(90000.0, (float) $untouched->outstanding);
+        $this->assertNotSame('Paid', $untouched->status);
+    }
+
+    public function test_one_company_failing_does_not_stop_the_others(): void
+    {
+        $this->configureGujarat();
+        Http::fake([
+            '*get_outstanding.php' => function ($request) {
+                return $request['Username'] === 'tegh-guj'
+                    ? Http::response(['statuscode' => 400, 'statusresponse' => 'unauthorized user details'], 200)
+                    : Http::response(['status' => 'success', 'data' => []], 200);
+            },
+            '*' => Http::response(['status' => 'success', 'data' => []], 200),
+        ]);
+
+        $summary = app(BusySyncService::class)->sync('test');
+
+        $this->assertArrayHasKey('gujarat', $summary['errors']);
+        $this->assertArrayNotHasKey('mumbai', $summary['errors']);
+        $this->assertDatabaseHas('busy_sync_logs', ['company' => 'mumbai', 'status' => 'success']);
+        $this->assertDatabaseHas('busy_sync_logs', ['company' => 'gujarat', 'status' => 'error']);
+    }
+
+    /**
+     * Mumbai and Gujarat return different parties under the same ERP code, which is
+     * what the live companies do. The fake switches on the credentials, since the
+     * URL is identical for every company.
+     *
+     * @return array<string, callable>
+     */
+    private function perCompanyFake(): array
+    {
+        $ok = fn (array $data) => Http::response(['status' => 'success', 'data' => $data], 200);
+
+        return [
+            '*get_accounts.php' => fn ($request) => $ok($request['Username'] === 'tegh-guj' ? [
+                ['ERP_code' => 'P-1001', 'Name' => 'Gujarat Cables LLP', 'Alias' => 'GJ-1', 'City' => 'Ahmedabad'],
+            ] : [
+                ['ERP_code' => 'P-1001', 'Name' => 'ABC Electricals Pvt Ltd', 'Alias' => 'TC-2000', 'City' => 'Mumbai'],
+            ]),
+            '*get_outstanding.php' => fn ($request) => $ok($request['Username'] === 'tegh-guj' ? [
+                [
+                    'ERP_code' => 'P-1001', 'PartyName' => 'Gujarat Cables LLP', 'Alias' => 'GJ-1',
+                    'BillNo' => 'GJ-900', 'VchCode' => 'GJ-UID-900', 'BillDate' => '2026-07-01',
+                    'DueDate' => '2026-07-31', 'BillAmt' => 50000, 'BalAmt' => 50000,
+                ],
+            ] : [
+                [
+                    'ERP_code' => 'P-1001', 'PartyName' => 'ABC Electricals Pvt Ltd', 'Alias' => 'TC-2000',
+                    'BillNo' => 'INV-2500', 'VchCode' => 'INV-UID-2500', 'BillDate' => '2026-07-01',
+                    'DueDate' => '2026-07-31', 'BillAmt' => 295000, 'RecdAmt' => 50000, 'BalAmt' => 245000,
+                ],
+            ]),
+            '*' => $ok([]),
+        ];
     }
 
     /**

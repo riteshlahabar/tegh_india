@@ -26,6 +26,7 @@ class Invoice extends Model
 
     protected $fillable = [
         'party_id',
+        'company',
         'invoice_no',
         'po_no',
         'narration',

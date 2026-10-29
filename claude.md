@@ -213,9 +213,31 @@ guessing. Tag everything `mumbai` in the migration, then sync the other two.
   - `BusyIntegrationTest` — updated to the new config shape, plus 4 new cases
     (per-company send, no cross-company leak, unconfigured company named in the error).
   - Verified: 20/20 on a standalone harness of the resolution chain (no `vendor/` locally).
-- [ ] Step 4 — `BusySyncService` company loop + scoping
+- [x] **Step 4 — sync loop + company scoping**
+  - `sync()` now loops `BusyCompanies::configured()`, delegating one pass to
+    `syncCompany()`. One company failing no longer abandons the rest — each gets its
+    own `busy_sync_logs` row and the errors are collected; the run only throws when
+    nothing succeeded. `busy_status` becomes Connected / Partly connected / Error.
+  - **`parties()` and `invoices()` are the single chokepoint** — every read in the
+    service goes through them, so adding `->where('company', $this->company)` there
+    covers lookups, uniqueness checks and the cache warm-up at once. This is what
+    makes `closeMissingOutstanding()` safe: unscoped, syncing Gujarat would have
+    marked every Mumbai invoice Paid.
+  - `partyCache` is cleared per company — party codes repeat across companies, so a
+    cache warmed for one would resolve another's rows.
+  - `upsertParty()` / `upsertInvoice()` stamp `company` on create.
+  - New migration `2026_10_29_130000_add_company_to_busy_sync_logs.php` — the first
+    migration covered `apna_sync_logs`, but `busy_sync_logs` is the table actually
+    written.
+  - `busy:sync --company=` added; prints a per-company table and exits non-zero if
+    any company failed, so cron notices a stale credential.
+  - `AdminController::syncBusy()` reports the per-company breakdown and flags
+    partial success as an error rather than a clean run.
+  - `Party`, `Invoice`, `BusySyncLog` — `company` added to `$fillable`.
+  - 6 new tests, including same-ERP-code-two-companies and the cross-company
+    close-out guard. Suite now 18 tests; **not run locally** (no `vendor/`).
 - [ ] Step 5 — `OutstandingPageService` real column
-- [ ] Step 6 — controller / command / views / models
+- [ ] Step 6 — BusyApiController company selector / views
 
 ### Credential source — decided
 

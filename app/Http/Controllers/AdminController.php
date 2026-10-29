@@ -253,18 +253,40 @@ class AdminController extends Controller
 
     public function syncBusy(Request $request, BusySyncService $sync)
     {
+        $company = $request->input('company') ?: null;
+
         try {
-            $result = $sync->sync($request->user()->username ?? 'web');
+            $result = $sync->sync(
+                triggeredBy: $request->user()->username ?? 'web',
+                company: $company,
+            );
         } catch (BusyApiException $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->back()->with('success', sprintf(
-            'BUSY sync completed: %d parties, %d invoices updated (%d closed).',
+        $breakdown = implode(', ', array_map(
+            fn (string $slug, array $row) => sprintf(
+                '%s %s',
+                BusyCompanies::label($slug),
+                isset($row['error']) ? 'failed' : $row['invoices_upserted'].' invoices',
+            ),
+            array_keys($result['companies']),
+            $result['companies'],
+        ));
+
+        $message = sprintf(
+            'BUSY sync completed: %d parties, %d invoices updated (%d closed). %s',
             $result['parties_upserted'],
             $result['invoices_upserted'],
             $result['invoices_closed'],
-        ));
+            $breakdown,
+        );
+
+        // Partial success still reaches here -- surface it as a warning so a stale
+        // credential is not mistaken for a clean run.
+        return $result['errors'] === []
+            ? redirect()->back()->with('success', $message)
+            : redirect()->back()->with('error', $message.' — '.implode(' | ', $result['errors']));
     }
 
     public function updateSettings(Request $request)
