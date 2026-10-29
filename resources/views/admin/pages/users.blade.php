@@ -1,0 +1,124 @@
+@extends('layouts.admin')
+@section('content')
+@if(auth()->user()->isAdmin())
+<div class="section-card mb-3">
+  <div class="section-title">Add telecaller</div>
+  <div class="section-sub">Creates an app login. The telecaller signs in with this username and password on the Tegh Cables mobile app and can work the same outstanding, follow-up, call, WhatsApp, email and report screens.</div>
+  <form method="POST" action="{{ route('admin.telecallers.store') }}" class="row g-2 align-items-end">
+    @csrf
+    <div class="col-md-3">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Name</label>
+      <input class="form-control" name="name" value="{{ old('name') }}" required maxlength="255">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Username</label>
+      <input class="form-control" name="username" value="{{ old('username') }}" required maxlength="255" pattern="[A-Za-z0-9_\-]+" title="Letters, numbers, dash or underscore">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Email</label>
+      <input class="form-control" type="email" name="email" value="{{ old('email') }}" required maxlength="255">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Password</label>
+      <input class="form-control" type="text" name="password" required minlength="4" maxlength="255" autocomplete="new-password">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Branch</label>
+      <input class="form-control" name="branch" value="{{ old('branch', 'All') }}" maxlength="255">
+    </div>
+    <div class="col-12">
+      <button class="btn btn-crm-primary" type="submit"><i class="fa-solid fa-user-plus"></i> Add telecaller</button>
+    </div>
+  </form>
+</div>
+@endif
+<div class="row g-3 mb-3">
+  @foreach($team as $row)
+    @php $user = $row['user']; @endphp
+    <div class="col-md-4">
+      <div class="section-card h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="avatar-sm" style="background:{{ $user->role === 'admin' ? 'var(--navy)' : 'var(--accent)' }};">{{ $user->initials ?: crm_initials($user->name) }}</div>
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:var(--navy);">{{ $user->name }}</div>
+            <div style="font-size:11px;color:var(--muted);">{{ $user->role === 'admin' ? 'Administrator' : 'Payment Follow-up Executive' }}@if($user->role !== 'admin') · {{ $user->username }}@endif</div>
+          </div>
+        </div>
+        @if($user->role === 'admin')
+          <div class="text-muted" style="font-size:12px;">Full visibility across all telecallers, accounts and reports.</div>
+        @else
+          <div class="row g-2">
+            <div class="col-6"><div class="stat-mini"><div class="l">Assigned</div><div class="v">{{ $row['assigned'] }}</div></div></div>
+            <div class="col-6"><div class="stat-mini"><div class="l">Calls</div><div class="v">{{ $row['calls'] }}</div></div></div>
+            <div class="col-6"><div class="stat-mini"><div class="l">PTP Created</div><div class="v">{{ $row['ptp'] }}</div></div></div>
+            <div class="col-6"><div class="stat-mini"><div class="l">Collected</div><div class="v" style="font-size:14px;">{{ inr($row['collected']) }}</div></div></div>
+          </div>
+          @if(auth()->user()->isAdmin())
+            <form method="POST" action="{{ route('admin.telecallers.update', $user) }}" class="d-flex gap-2 mt-3">
+              @csrf
+              @method('PUT')
+              <input class="form-control form-control-sm" type="text" name="password" placeholder="New app password" required minlength="4" autocomplete="new-password">
+              <button class="btn btn-crm-outline btn-sm" type="submit">Reset</button>
+            </form>
+            <form method="POST" action="{{ route('admin.telecallers.destroy', $user) }}" class="mt-2" onsubmit="return confirm('Remove {{ $user->name }}? Past calls stay on the accounts.')">
+              @csrf
+              @method('DELETE')
+              <button class="btn btn-sm btn-outline-danger" type="submit">Remove telecaller</button>
+            </form>
+          @endif
+        @endif
+      </div>
+    </div>
+  @endforeach
+</div>
+<div class="section-card">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <div class="section-title mb-0">Team Performance</div>
+      <div class="section-sub mb-0">Assigned parties, calls, PTP and collections by user</div>
+    </div>
+    <button class="btn btn-crm-outline btn-sm" data-bs-toggle="modal" data-bs-target="#assignModal"><i class="fa-solid fa-user-plus"></i> Assign Party</button>
+  </div>
+  <div class="table-wrap">
+    <table class="crm-table">
+      <thead><tr><th>User</th><th>Role</th><th>Assigned Parties</th><th>Today's Follow-ups</th><th>Calls Made</th><th>Connected</th><th>PTP Created</th><th>Amount Collected</th></tr></thead>
+      <tbody>
+        @foreach($team as $row)
+          @continue($row['user']->role === 'admin')
+          <tr>
+            <td><b>{{ $row['user']->name }}</b></td>
+            <td>Payment Follow-up Executive</td>
+            <td>{{ $row['assigned'] }}</td>
+            <td>{{ $row['followups'] }}</td>
+            <td>{{ $row['calls'] }}</td>
+            <td>{{ $row['connected'] }}</td>
+            <td>{{ $row['ptp'] }}</td>
+            <td>{{ inr($row['collected']) }}</td>
+          </tr>
+        @endforeach
+      </tbody>
+    </table>
+  </div>
+  <canvas id="teamChart" height="90" class="mt-4"></canvas>
+</div>
+@endsection
+@section('scripts')
+<script>
+(function () {
+  const ctx = document.getElementById('teamChart');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: @json($chartLabels),
+      datasets: [
+        { label: 'Calls', data: @json($chartCalls), backgroundColor: '#2E6FE0', borderRadius: 6 },
+        { label: 'Connected', data: @json($chartConnected), backgroundColor: '#198754', borderRadius: 6 },
+        { label: 'PTP', data: @json($chartPtp), backgroundColor: '#FD7E14', borderRadius: 6 }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+  });
+})();
+</script>
+@endsection

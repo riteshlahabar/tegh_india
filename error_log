@@ -1,0 +1,7 @@
+[20-Aug-2026 10:17:07 UTC] PHP Fatal error:  Uncaught RuntimeException: Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.4.1". You are running 8.3.33. in /home/turnkeyi/public_html/tpi.turnkeyinfotech.live/vendor/composer/platform_check.php:26
+Stack trace:
+#0 /home/turnkeyi/public_html/tpi.turnkeyinfotech.live/vendor/composer/autoload_real.php(25): require()
+#1 /home/turnkeyi/public_html/tpi.turnkeyinfotech.live/vendor/autoload.php(22): ComposerAutoloaderInit36793882908b6cbdd344b5a4840231db::getLoader()
+#2 /home/turnkeyi/public_html/tpi.turnkeyinfotech.live/artisan(10): require('/home/turnkeyi/...')
+#3 {main}
+  thrown in /home/turnkeyi/public_html/tpi.turnkeyinfotech.live/vendor/composer/platform_check.php on line 26
