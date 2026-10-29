@@ -28,7 +28,6 @@ Thumbs.db
 
 *.zip
 *.tar.gz
-*.sql
 
 # Database dumps - may contain live data and credentials
 /database/turnkeyi_tpi.sql
