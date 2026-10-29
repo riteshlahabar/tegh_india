@@ -36,14 +36,25 @@
             <label class="form-label" style="font-size:12px;font-weight:600;">Apna Bazar / BUSY API URL</label>
             <input class="form-control" name="busy_base_url" value="{{ old('busy_base_url', $busyBaseUrl) }}" placeholder="http://api.apnabazarapp.in/WebAPI/V2">
           </div>
-          <div class="mb-2">
-            <label class="form-label" style="font-size:12px;font-weight:600;">API Username</label>
-            <input class="form-control" name="busy_username" value="{{ old('busy_username', $busyUsername) }}" autocomplete="off">
-          </div>
-          <div class="mb-2">
-            <label class="form-label" style="font-size:12px;font-weight:600;">API Password</label>
-            <input class="form-control" type="password" name="busy_password" value="" placeholder="{{ $hasBusyPassword ? '•••••••• (leave blank to keep)' : 'Password provided by Apna Bazar' }}" autocomplete="new-password">
-          </div>
+          <div class="section-sub mb-2">Each company has its own Apna Bazar login — the API has no company code, so the login is what decides whose books are returned. Leave a company blank to skip it during sync.</div>
+          @foreach($busyCompanies as $company)
+            <div class="stat-mini mb-2">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">
+                {{ $company['label'] }}
+                @if($company['username'] === '' || ! $company['hasPassword'])
+                  <span class="text-muted" style="font-weight:400;">— not configured</span>
+                @endif
+              </div>
+              <div class="mb-2">
+                <label class="form-label" style="font-size:11px;">Username</label>
+                <input class="form-control" name="busy_credentials[{{ $company['slug'] }}][username]" value="{{ old('busy_credentials.'.$company['slug'].'.username', $company['username']) }}" autocomplete="off">
+              </div>
+              <div>
+                <label class="form-label" style="font-size:11px;">Password</label>
+                <input class="form-control" type="password" name="busy_credentials[{{ $company['slug'] }}][password]" value="" placeholder="{{ $company['hasPassword'] ? '•••••••• (leave blank to keep)' : 'Password provided by Apna Bazar' }}" autocomplete="new-password">
+              </div>
+            </div>
+          @endforeach
           <button class="btn btn-crm-primary btn-sm" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save BUSY credentials</button>
         </form>
       @endif

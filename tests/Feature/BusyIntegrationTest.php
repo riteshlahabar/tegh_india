@@ -24,9 +24,13 @@ class BusyIntegrationTest extends TestCase
 
         config([
             'busy.base_url' => 'http://api.apnabazarapp.in/WebAPI/V2',
-            'busy.username' => 'tegh-user',
-            'busy.password' => 'secret',
             'busy.timeout' => 10,
+            'busy.default_company' => 'mumbai',
+            'busy.companies' => [
+                'mumbai' => ['label' => 'Mumbai', 'username' => 'tegh-user', 'password' => 'secret'],
+                'gujarat' => ['label' => 'Gujarat', 'username' => 'tegh-guj', 'password' => 'guj-secret'],
+                'pune' => ['label' => 'Pune', 'username' => '', 'password' => ''],
+            ],
         ]);
     }
 
@@ -74,9 +78,39 @@ class BusyIntegrationTest extends TestCase
 
     public function test_client_requires_credentials(): void
     {
-        config(['busy.username' => '', 'busy.password' => '']);
+        config(['busy.companies.mumbai.username' => '', 'busy.companies.mumbai.password' => '']);
         $this->expectException(BusyApiException::class);
         app(BusyApiClient::class)->getOutstanding();
+    }
+
+    public function test_client_sends_the_credentials_of_the_company_it_is_bound_to(): void
+    {
+        Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
+
+        app(BusyApiClient::class)->forCompany('gujarat')->getOutstanding();
+
+        Http::assertSent(fn ($request) => $request['Username'] === 'tegh-guj'
+            && $request['Password'] === 'guj-secret');
+    }
+
+    public function test_binding_a_company_does_not_leak_into_the_shared_client(): void
+    {
+        Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
+
+        $client = app(BusyApiClient::class);
+        $client->forCompany('gujarat')->getOutstanding();
+        $client->getOutstanding();
+
+        $this->assertSame('mumbai', $client->company());
+        Http::assertSent(fn ($request) => $request['Username'] === 'tegh-user');
+    }
+
+    public function test_an_unconfigured_company_is_reported_by_name(): void
+    {
+        $this->expectException(BusyApiException::class);
+        $this->expectExceptionMessage('Pune');
+
+        app(BusyApiClient::class)->forCompany('pune')->getOutstanding();
     }
 
     public function test_sync_upserts_parties_and_invoices_from_busy(): void

@@ -16,6 +16,7 @@ use App\Services\Busy\BusyApiException;
 use App\Services\Busy\BusySyncService;
 use App\Services\WhatsApp\GreenApiClient;
 use App\Services\WhatsApp\GreenApiException;
+use App\Support\BusyCompanies;
 use App\Support\SmtpSettings;
 use App\Support\WhatsappTemplates;
 use Illuminate\Http\Request;
@@ -282,9 +283,10 @@ class AdminController extends Controller
             'smtp_password' => 'nullable|string|max:255',
             'smtp_from_address' => 'nullable|email|max:255',
             'smtp_from_name' => 'nullable|string|max:255',
-            'busy_username' => 'nullable|string|max:255',
-            'busy_password' => 'nullable|string|max:255',
             'busy_base_url' => 'nullable|url|max:255',
+            'busy_credentials' => 'nullable|array',
+            'busy_credentials.*.username' => 'nullable|string|max:255',
+            'busy_credentials.*.password' => 'nullable|string|max:255',
         ]);
 
         if (array_key_exists('followup_reminder', $validated)) {
@@ -304,14 +306,23 @@ class AdminController extends Controller
             AppSetting::setValue('smtp_from_name', $validated['smtp_from_name'] ?? '');
         }
 
-        if ($request->has('busy_username')) {
-            AppSetting::setValue('busy_username', $validated['busy_username'] ?? '');
-        }
         if ($request->has('busy_base_url')) {
             AppSetting::setValue('busy_base_url', rtrim((string) ($validated['busy_base_url'] ?? ''), '/'));
         }
-        if (array_key_exists('busy_password', $validated) && ($validated['busy_password'] ?? '') !== '') {
-            AppSetting::setValue('busy_password', $validated['busy_password']);
+
+        // One credential pair per Apna Bazar company -- the API has no company code,
+        // so the login is what selects which company's books are returned. Unknown
+        // slugs are ignored rather than stored.
+        foreach (($validated['busy_credentials'] ?? []) as $slug => $credentials) {
+            if (! BusyCompanies::exists((string) $slug)) {
+                continue;
+            }
+
+            BusyCompanies::setCredentials(
+                (string) $slug,
+                $credentials['username'] ?? null,
+                $credentials['password'] ?? null,
+            );
         }
 
         return redirect()->back()->with('success', 'Settings saved.');

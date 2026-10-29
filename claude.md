@@ -197,11 +197,32 @@ guessing. Tag everything `mumbai` in the migration, then sync the other two.
 
 - [x] **Step 1 — migration written**: `2026_10_29_120000_add_company_to_crm_and_apna_tables.php`
       — syntax checked, **NOT run**. Needs review before `php artisan migrate` on live.
-- [ ] Step 2 — per-company credentials
-- [ ] Step 3 — `BusyApiClient` company argument
+- [x] **Steps 2 & 3 — per-company credentials + company-aware client**
+  - `app/Support/BusyCompanies.php` (new) — the registry. Resolution order per company:
+    `app_settings.busy_{slug}_username` → `config/busy.php` (env) → for Mumbai only,
+    the legacy `busy_username`/`busy_password` keys. **Mumbai keeps working untouched
+    on deploy**, since that is where its credentials sit today.
+  - `config/busy.php` — `companies` map + `default_company`; legacy keys retained.
+  - `BusyApiClient` — `forCompany($slug)` returns a *clone*, so binding cannot leak
+    into the container-shared instance. `company()` exposes the current binding.
+    Unconfigured companies throw naming the company and the env vars to set.
+  - `AdminController::updateSettings()` — accepts `busy_credentials[{slug}][username|password]`;
+    unknown slugs ignored; a blank password keeps the stored one.
+  - `SettingsPageService` + `settings.blade.php` — one credential block per company,
+    marked "not configured" when incomplete. Passwords are never echoed back.
+  - `BusyIntegrationTest` — updated to the new config shape, plus 4 new cases
+    (per-company send, no cross-company leak, unconfigured company named in the error).
+  - Verified: 20/20 on a standalone harness of the resolution chain (no `vendor/` locally).
 - [ ] Step 4 — `BusySyncService` company loop + scoping
 - [ ] Step 5 — `OutstandingPageService` real column
 - [ ] Step 6 — controller / command / views / models
+
+### Credential source — decided
+
+`AppSetting` is authoritative, `config/busy.php` is the fallback. Admins change
+credentials from the settings page without a deploy. The stale demo account in
+`.env:46-47` (`8591595795`/`12345678`) is now only a last-resort default for Mumbai
+and is overridden by the stored `busy_username`; it should be removed from `.env`.
 
 ## Open questions
 

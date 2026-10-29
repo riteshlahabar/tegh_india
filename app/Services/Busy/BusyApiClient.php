@@ -2,13 +2,38 @@
 
 namespace App\Services\Busy;
 
-use App\Models\AppSetting;
+use App\Support\BusyCompanies;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class BusyApiClient
 {
+    /**
+     * Which company's books to read. Null means the default company, so existing
+     * callers keep working unchanged.
+     */
+    private ?string $company = null;
+
+    /**
+     * Returns a copy bound to one company. The client is resolved from the container
+     * and shared, so binding has to produce a new instance rather than mutate the
+     * shared one -- otherwise a sync loop would leak the last company into whatever
+     * requested the client next.
+     */
+    public function forCompany(?string $company): self
+    {
+        $clone = clone $this;
+        $clone->company = $company === null ? null : BusyCompanies::resolve($company);
+
+        return $clone;
+    }
+
+    public function company(): string
+    {
+        return $this->company ?? BusyCompanies::default();
+    }
+
     public function call(string $action, array $params = []): array
     {
         $endpoint = BusyEndpoints::CATALOG[$action] ?? null;
@@ -16,10 +41,16 @@ class BusyApiClient
             throw new BusyApiException("Unknown BUSY API action [{$action}].");
         }
 
+        $company = $this->company();
         $username = $this->username();
         $password = $this->password();
         if ($username === '' || $password === '') {
-            throw new BusyApiException('BUSY API credentials are not configured. Set BUSY_API_USERNAME and BUSY_API_PASSWORD.');
+            throw new BusyApiException(sprintf(
+                'Apna Bazar credentials for %s are not configured. Add them under Settings, or set BUSY_%s_USERNAME and BUSY_%s_PASSWORD.',
+                BusyCompanies::label($company),
+                strtoupper($company),
+                strtoupper($company),
+            ));
         }
 
         $payload = $this->mergeParams($params, $username, $password);
@@ -271,19 +302,17 @@ class BusyApiClient
 
     public function username(): string
     {
-        return (string) (AppSetting::getValue('busy_username') ?: config('busy.username', ''));
+        return BusyCompanies::username($this->company());
     }
 
     public function password(): string
     {
-        return (string) (AppSetting::getValue('busy_password') ?: config('busy.password', ''));
+        return BusyCompanies::password($this->company());
     }
 
     public function baseUrl(): string
     {
-        $url = (string) (AppSetting::getValue('busy_base_url') ?: config('busy.base_url'));
-
-        return rtrim($url, '/');
+        return BusyCompanies::baseUrl();
     }
 
     private function timeout(): int

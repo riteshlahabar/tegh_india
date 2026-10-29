@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\AppSetting;
+use App\Support\BusyCompanies;
 
 class SettingsPageService
 {
@@ -15,9 +16,8 @@ class SettingsPageService
             'reminder' => AppSetting::getValue('followup_reminder', '1 day before due date'),
             'lastSync' => AppSetting::getValue('busy_last_sync', 'Never'),
             'busyStatus' => AppSetting::getValue('busy_status', 'Not connected'),
-            'busyUsername' => AppSetting::getValue('busy_username', config('busy.username')),
-            'busyBaseUrl' => AppSetting::getValue('busy_base_url', config('busy.base_url')),
-            'hasBusyPassword' => filled(AppSetting::getValue('busy_password') ?: config('busy.password')),
+            'busyBaseUrl' => BusyCompanies::baseUrl(),
+            'busyCompanies' => $this->busyCompanies(),
             'smtpEnabled' => AppSetting::getValue('smtp_enabled', '0') === '1',
             'smtpHost' => AppSetting::getValue('smtp_host', ''),
             'smtpPort' => AppSetting::getValue('smtp_port', '587'),
@@ -27,5 +27,21 @@ class SettingsPageService
             'smtpFromAddress' => AppSetting::getValue('smtp_from_address', ''),
             'smtpFromName' => AppSetting::getValue('smtp_from_name', 'Tegh Cables CRM'),
         ];
+    }
+
+    /**
+     * One row per Apna Bazar company for the settings form. Passwords are never sent
+     * back to the browser -- the form only reports whether one is stored.
+     *
+     * @return list<array{slug: string, label: string, username: string, hasPassword: bool}>
+     */
+    private function busyCompanies(): array
+    {
+        return array_map(fn (string $slug) => [
+            'slug' => $slug,
+            'label' => BusyCompanies::label($slug),
+            'username' => BusyCompanies::username($slug),
+            'hasPassword' => BusyCompanies::password($slug) !== '',
+        ], BusyCompanies::slugs());
     }
 }
