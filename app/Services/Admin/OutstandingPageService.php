@@ -51,43 +51,10 @@ class OutstandingPageService
         $query = Invoice::with(['party', 'assignee', 'activePromise']);
 
         if (auth()->user()?->isAdmin()) {
-            $this->limitToSalesInvoices($query);
+            $query->salesSeriesOnly();
         }
 
         return $query;
-    }
-
-    /**
-     * Admins see sales invoices only, not the journal (JV-) and payment (PV-)
-     * vouchers that also arrive in the outstanding feed.
-     *
-     * Each company numbers its bills differently -- Mumbai TCIPL/, Gujarat TCIG/,
-     * Pune TCIPLP -- so the prefix is matched per company. The previous single
-     * 'TCIPL%' hid all 319 Gujarat invoices and matched Pune's only because
-     * TCIPLP happens to begin with TCIPL.
-     */
-    private function limitToSalesInvoices(Builder $query): void
-    {
-        $companies = array_filter(
-            BusyCompanies::all(),
-            fn (array $company) => $company['invoice_prefixes'] !== [],
-        );
-
-        if ($companies === []) {
-            return;
-        }
-
-        $query->where(function (Builder $outer) use ($companies) {
-            foreach ($companies as $slug => $company) {
-                $outer->orWhere(function (Builder $scoped) use ($slug, $company) {
-                    $scoped->where('company', $slug)->where(function (Builder $prefixes) use ($company) {
-                        foreach ($company['invoice_prefixes'] as $prefix) {
-                            $prefixes->orWhere('invoice_no', 'like', $prefix.'%');
-                        }
-                    });
-                });
-            }
-        });
     }
 
     private function applyFilters(Builder $query, array $filters): Builder

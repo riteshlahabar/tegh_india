@@ -97,7 +97,7 @@ class DashboardPageService
         $query = Invoice::query()->where('outstanding', '>', 0);
 
         if (auth()->user()?->isAdmin()) {
-            $query->where('invoice_no', 'like', 'TCIPL%');
+            $query->salesSeriesOnly();
         }
 
         return $query;

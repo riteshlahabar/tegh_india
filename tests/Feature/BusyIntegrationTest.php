@@ -227,7 +227,9 @@ class BusyIntegrationTest extends TestCase
             ->assertSee('What do you want to see?')
             ->assertSee('Get Account Outstanding')
             ->assertSee('Add New Account Master')
-            ->assertSee('Show records');
+            ->assertSee('Show records')
+            ->assertSee('Which company?')
+            ->assertSee('no credentials');
 
         $this->actingAs($admin)
             ->getJson('/admin/busy/api')
@@ -241,6 +243,55 @@ class BusyIntegrationTest extends TestCase
             ->assertJsonPath('success', true);
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'get_outstanding.php'));
+    }
+
+    public function test_busy_api_page_calls_the_company_that_was_picked(): void
+    {
+        $this->configureGujarat();
+        Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->postJson('/admin/busy/api/get_outstanding', ['company' => 'gujarat'])
+            ->assertOk()
+            ->assertJsonPath('company', 'gujarat');
+
+        Http::assertSent(fn ($request) => $request['Username'] === 'tegh-guj');
+    }
+
+    public function test_busy_api_page_does_not_forward_company_to_apna_bazar(): void
+    {
+        $this->configureGujarat();
+        Http::fake(['*' => Http::response(['statuscode' => 200, 'result' => []], 200)]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->postJson('/admin/busy/api/get_outstanding', ['company' => 'gujarat']);
+
+        // Apna Bazar has no company field; passing one through would be noise at
+        // best and could confuse an endpoint that echoes unknown params.
+        Http::assertSent(fn ($request) => ! isset($request['company']));
+    }
+
+    public function test_busy_api_page_rejects_an_unknown_company(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->postJson('/admin/busy/api/get_outstanding', ['company' => 'delhi'])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_sync_button_can_target_a_single_company(): void
+    {
+        $this->configureGujarat();
+        Http::fake($this->perCompanyFake());
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->post('/admin/busy-sync', ['company' => 'gujarat'])->assertRedirect();
+
+        $this->assertDatabaseHas('busy_sync_logs', ['company' => 'gujarat']);
+        $this->assertDatabaseMissing('busy_sync_logs', ['company' => 'mumbai']);
     }
 
     public function test_telecaller_cannot_call_busy_api_proxy(): void

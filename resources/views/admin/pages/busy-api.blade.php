@@ -4,7 +4,17 @@
   <div class="section-title mb-1">Fetch from BUSY</div>
   <div class="section-sub">Choose a report, fill in the dates if asked, then click Show records. The list appears below.</div>
   <div class="row g-3 align-items-end">
-    <div class="col-lg-5">
+    <div class="col-lg-3">
+      <label class="form-label" for="busyCompany" style="font-size:12px;font-weight:600;">Which company?</label>
+      <select class="form-select" id="busyCompany">
+        @foreach($companies as $company)
+          <option value="{{ $company['slug'] }}" @disabled(! $company['configured']) @selected($company['slug'] === $defaultCompany)>
+            {{ $company['label'] }}@unless($company['configured']) — no credentials @endunless
+          </option>
+        @endforeach
+      </select>
+    </div>
+    <div class="col-lg-4">
       <label class="form-label" for="busyReport" style="font-size:12px;font-weight:600;">What do you want to see?</label>
       <select class="form-select" id="busyReport">
         <option value="">Select a report</option>
@@ -17,7 +27,7 @@
         @endforeach
       </select>
     </div>
-    <div class="col-lg-7" id="busyFilters"></div>
+    <div class="col-lg-5" id="busyFilters"></div>
   </div>
   <button class="btn btn-crm-primary mt-3" type="button" id="busyShow" disabled><i class="fa-solid fa-table"></i> <span>Show records</span></button>
 </div>
@@ -46,6 +56,7 @@
 const busyReports = @json($reports);
 const busyDefaults = { from: @json($yearStart), to: @json($today) };
 const busyReport = document.getElementById('busyReport');
+const busyCompany = document.getElementById('busyCompany');
 const busyFilters = document.getElementById('busyFilters');
 const busyShow = document.getElementById('busyShow');
 const busyTitle = document.getElementById('busyTitle');
@@ -216,13 +227,16 @@ busyShow.addEventListener('click', async function () {
     return;
   }
   const body = new FormData();
+  // Selects the credentials, and therefore whose books answer. The controller
+  // strips it before forwarding -- Apna Bazar has no company parameter.
+  body.append('company', busyCompany.value);
   busyFilters.querySelectorAll('input, select, textarea').forEach(function (field) {
     if (field.name && field.value !== '') {
       body.append(field.name, field.value);
     }
   });
   busyShow.disabled = true;
-  busyTitle.textContent = report.name;
+  busyTitle.textContent = report.name + ' — ' + busyCompany.options[busyCompany.selectedIndex].text.trim();
   busyMeta.textContent = 'Loading records…';
   busySearch.disabled = true;
   busyRows = [];

@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Services\Busy\BusyEndpoints;
+use App\Support\BusyCompanies;
 use Carbon\Carbon;
 
 class BusyApiPageService
@@ -21,6 +22,14 @@ class BusyApiPageService
             'reports' => array_map($this->present(...), array_merge($reads, $writes)),
             'today' => $today->toDateString(),
             'yearStart' => $this->financialYearStart($today)->toDateString(),
+            // The login decides whose books answer, so the page needs to say which
+            // company it is asking. Unconfigured ones are listed but disabled.
+            'companies' => array_map(fn (string $slug) => [
+                'slug' => $slug,
+                'label' => BusyCompanies::label($slug),
+                'configured' => BusyCompanies::hasCredentials($slug),
+            ], BusyCompanies::slugs()),
+            'defaultCompany' => BusyCompanies::default(),
         ];
     }
 

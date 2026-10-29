@@ -236,8 +236,30 @@ guessing. Tag everything `mumbai` in the migration, then sync the other two.
   - `Party`, `Invoice`, `BusySyncLog` — `company` added to `$fillable`.
   - 6 new tests, including same-ERP-code-two-companies and the cross-company
     close-out guard. Suite now 18 tests; **not run locally** (no `vendor/`).
-- [ ] Step 5 — `OutstandingPageService` real column
-- [ ] Step 6 — BusyApiController company selector / views
+- [x] **Step 5 — Outstanding filters on the real column**
+  - `OutstandingPageService` region filter → `where('company', …)`; a city name that
+    is not a company still falls through to the old party-address match.
+  - **Second blocker found:** `baseQuery()` limited admins to `invoice_no LIKE
+    'TCIPL%'`. Each company numbers its own bills — Mumbai `TCIPL/` (1,607),
+    Gujarat `TCIG/` (319), Pune `TCIPLP` (345) — so every Gujarat invoice would
+    have synced and then been invisible. Pune matched only by accident.
+    Prefixes moved to `config/busy.php` per company.
+  - Dropdown built from configured companies; label "City" → "Region". Request key
+    stays `city`, so existing links and the mobile API keep working.
+- [x] **Step 6 — company selectors and the last hardcoded assumptions**
+  - `Invoice::scopeSalesSeriesOnly()` — the prefix logic extracted to the model.
+    `DashboardPageService:100` had the **same** `TCIPL%` filter; both call the scope
+    now so a third copy cannot drift.
+  - `BusyApiController` takes `company`, validates it, and strips it before
+    forwarding — Apna Bazar has no such field. Response echoes the company used.
+  - BUSY API page gains a "Which company?" picker; unconfigured companies are listed
+    but disabled.
+  - Sync modal gains a company picker ("Every configured company" by default), shared
+    across admin pages via `AdminSharedDataService`.
+  - Audited for other hardcoded assumptions: `BusyPayload::city()` legitimately
+    derives the *customer's* city and is unchanged; the `Bhiwandi` string in
+    `SettingsPageService` is a default office address, not a filter.
+  - Suite now 25 tests; **still not run** (no `vendor/` locally).
 
 ### Credential source — decided
 

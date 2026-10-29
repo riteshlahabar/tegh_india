@@ -141,6 +141,18 @@
           <div class="d-flex justify-content-between mb-1"><span class="text-muted" style="font-size:12.5px;">Last Sync</span><b style="font-size:12.5px;">{{ $lastBusySync ?? 'Never' }}</b></div>
           <div class="d-flex justify-content-between mb-1"><span class="text-muted" style="font-size:12.5px;">Status</span><span class="badge-status badge-paid">Connected</span></div>
           <div class="d-flex justify-content-between mb-3"><span class="text-muted" style="font-size:12.5px;">Source</span><b style="font-size:12.5px;">BUSY remains the accounting master</b></div>
+          @isset($busySyncCompanies)
+            <label class="form-label" for="busySyncCompany" style="font-size:12px;font-weight:600;">Company</label>
+            <select class="form-select form-select-sm" id="busySyncCompany" name="company" form="busySyncForm">
+              <option value="">Every configured company</option>
+              @foreach($busySyncCompanies as $company)
+                <option value="{{ $company['slug'] }}" @disabled(! $company['configured'])>
+                  {{ $company['label'] }}@unless($company['configured']) — no credentials @endunless
+                </option>
+              @endforeach
+            </select>
+            <div class="text-muted mt-1" style="font-size:11px;">Each company has its own Apna Bazar login; one failing does not stop the others.</div>
+          @endisset
         </div>
         <div id="syncProgress" style="display:none;">
           <div class="sync-step" id="ss1"><i class="fa-regular fa-circle"></i> Connecting to BUSY...</div>

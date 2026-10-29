@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Party;
 use App\Models\PaymentPromise;
 use App\Models\User;
+use App\Support\BusyCompanies;
 use App\Support\WhatsappTemplates;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
@@ -69,6 +70,13 @@ class AdminSharedDataService
             'notifications' => $notifications,
             'notificationCount' => count($notifications),
             'lastBusySync' => AppSetting::getValue('busy_last_sync'),
+            // Drives the company picker in the BUSY sync modal, which every admin
+            // page shares.
+            'busySyncCompanies' => array_map(fn (string $slug) => [
+                'slug' => $slug,
+                'label' => BusyCompanies::label($slug),
+                'configured' => BusyCompanies::hasCredentials($slug),
+            ], BusyCompanies::slugs()),
             'clockLabel' => now(config('app.timezone', 'Asia/Kolkata'))->format('D, d M · h:i A'),
             'parties' => Schema::hasTable('parties')
                 ? Party::orderBy('name')->get(['id', 'name'])

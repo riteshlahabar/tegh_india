@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\BusyCompanies;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -63,6 +64,39 @@ class Invoice extends Model
         static::addGlobalScope('busy_source', function (Builder $query) {
             $query->whereNotNull('busy_invoice_id')
                 ->where('busy_invoice_id', 'not like', 'BINV-%');
+        });
+    }
+
+    /**
+     * Sales invoices only, dropping the journal (JV-) and payment (PV-) vouchers
+     * that share the outstanding feed.
+     *
+     * Each company numbers its own bills -- Mumbai TCIPL/, Gujarat TCIG/, Pune
+     * TCIPLP -- so the prefix is matched together with the company that issued it.
+     * A single hardcoded 'TCIPL%' hid all 319 Gujarat invoices and matched Pune's
+     * only because TCIPLP happens to begin with TCIPL.
+     */
+    public function scopeSalesSeriesOnly(Builder $query): Builder
+    {
+        $companies = array_filter(
+            BusyCompanies::all(),
+            fn (array $company) => $company['invoice_prefixes'] !== [],
+        );
+
+        if ($companies === []) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $outer) use ($companies) {
+            foreach ($companies as $slug => $company) {
+                $outer->orWhere(function (Builder $scoped) use ($slug, $company) {
+                    $scoped->where('company', $slug)->where(function (Builder $prefixes) use ($company) {
+                        foreach ($company['invoice_prefixes'] as $prefix) {
+                            $prefixes->orWhere('invoice_no', 'like', $prefix.'%');
+                        }
+                    });
+                });
+            }
         });
     }
 
