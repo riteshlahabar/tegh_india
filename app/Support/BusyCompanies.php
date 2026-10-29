@@ -54,6 +54,7 @@ class BusyCompanies
                 'label' => (string) ($definition['label'] ?? ucfirst($slug)),
                 'username' => self::username($slug),
                 'password' => self::password($slug),
+                'invoice_prefixes' => self::invoicePrefixes($slug),
             ];
         }
 
@@ -125,6 +126,26 @@ class BusyCompanies
             (string) config("busy.companies.{$slug}.password", ''),
             $slug === self::MUMBAI ? self::LEGACY_PASSWORD_KEY : null,
         );
+    }
+
+    /**
+     * Sales-invoice number prefixes for a company, used to tell real invoices apart
+     * from journal and payment vouchers on the Outstanding page.
+     *
+     * Each company numbers its own bills: Mumbai TCIPL/, Gujarat TCIG/, Pune TCIPLP.
+     * A single hardcoded 'TCIPL%' hid every Gujarat invoice while matching Pune's
+     * only by accident, TCIPLP happening to start with TCIPL.
+     *
+     * @return list<string>
+     */
+    public static function invoicePrefixes(string $slug): array
+    {
+        $slug = self::normalise($slug);
+
+        return array_values(array_filter(
+            (array) config("busy.companies.{$slug}.invoice_prefixes", []),
+            fn ($prefix) => is_string($prefix) && $prefix !== '',
+        ));
     }
 
     public static function hasCredentials(string $slug): bool

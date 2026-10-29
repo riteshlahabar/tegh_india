@@ -34,16 +34,19 @@ return [
             'label' => 'Mumbai',
             'username' => env('BUSY_MUMBAI_USERNAME', env('BUSY_API_USERNAME', '')),
             'password' => env('BUSY_MUMBAI_PASSWORD', env('BUSY_API_PASSWORD', '')),
+            'invoice_prefixes' => ['TCIPL/'],
         ],
         BusyCompanies::GUJARAT => [
             'label' => 'Gujarat',
             'username' => env('BUSY_GUJARAT_USERNAME', ''),
             'password' => env('BUSY_GUJARAT_PASSWORD', ''),
+            'invoice_prefixes' => ['TCIG/'],
         ],
         BusyCompanies::PUNE => [
             'label' => 'Pune',
             'username' => env('BUSY_PUNE_USERNAME', ''),
             'password' => env('BUSY_PUNE_PASSWORD', ''),
+            'invoice_prefixes' => ['TCIPLP'],
         ],
     ],
 

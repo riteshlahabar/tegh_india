@@ -405,6 +405,81 @@ class BusyIntegrationTest extends TestCase
         $this->assertDatabaseHas('busy_sync_logs', ['company' => 'gujarat', 'status' => 'error']);
     }
 
+    public function test_outstanding_region_filter_reads_the_company_column(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->get('/admin/outstanding?city=Gujarat')
+            ->assertOk()
+            ->assertSee('TCIG/100/26-27')
+            ->assertDontSee('TCIPL/200/26-27')
+            ->assertDontSee('TCIPLP/300/26-27');
+    }
+
+    public function test_a_mumbai_party_addressed_in_pune_stays_under_mumbai(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        // The old filter guessed the region from parties.city, so this row - a
+        // Mumbai-company ledger for a Pune-based customer - showed under Pune.
+        $this->actingAs($admin)->get('/admin/outstanding?city=Pune')
+            ->assertOk()
+            ->assertDontSee('TCIPL/200/26-27');
+
+        $this->actingAs($admin)->get('/admin/outstanding?city=Mumbai')
+            ->assertOk()
+            ->assertSee('TCIPL/200/26-27');
+    }
+
+    public function test_each_company_keeps_its_own_invoice_prefix(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        // A single hardcoded TCIPL% hid every Gujarat invoice and matched Pune only
+        // because TCIPLP happens to begin with TCIPL.
+        $this->actingAs($admin)->get('/admin/outstanding')
+            ->assertOk()
+            ->assertSee('TCIPL/200/26-27')
+            ->assertSee('TCIG/100/26-27')
+            ->assertSee('TCIPLP/300/26-27')
+            ->assertDontSee('JV-900/26-27');
+    }
+
+    private function seedOneInvoicePerCompany(): void
+    {
+        $rows = [
+            ['mumbai', 'Mumbai Co Party', 'Pune', 'TCIPL/200/26-27'],
+            ['gujarat', 'Gujarat Co Party', 'Ahmedabad', 'TCIG/100/26-27'],
+            ['pune', 'Pune Co Party', 'Pune', 'TCIPLP/300/26-27'],
+            ['mumbai', 'Journal Party', 'Mumbai', 'JV-900/26-27'],
+        ];
+
+        foreach ($rows as $i => [$company, $name, $city, $invoiceNo]) {
+            $party = Party::create([
+                'name' => $name,
+                'company' => $company,
+                'city' => $city,
+                'code' => 'C-'.$i,
+                'busy_party_id' => 'P-'.$i,
+            ]);
+
+            Invoice::create([
+                'party_id' => $party->id,
+                'company' => $company,
+                'invoice_no' => $invoiceNo,
+                'busy_invoice_id' => 'UID-'.$i,
+                'invoice_date' => '2026-07-01',
+                'due_date' => '2026-07-31',
+                'invoice_amount' => 10000,
+                'received_amount' => 0,
+                'outstanding' => 10000,
+            ]);
+        }
+    }
+
     /**
      * Mumbai and Gujarat return different parties under the same ERP code, which is
      * what the live companies do. The fake switches on the credentials, since the

@@ -5,11 +5,19 @@ namespace App\Services\Admin;
 use App\Models\Invoice;
 use App\Models\Party;
 use App\Models\User;
+use App\Support\BusyCompanies;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
 class OutstandingPageService
 {
+    /**
+     * Kept for anything still referencing the constant. The dropdown is built from
+     * the configured companies instead, so adding a fourth company needs no change
+     * here.
+     *
+     * @deprecated Use BusyCompanies::all() labels.
+     */
     public const CITIES = ['Pune', 'Mumbai', 'Gujarat'];
 
     public function data(array $filters): array
@@ -26,7 +34,7 @@ class OutstandingPageService
             'filteredCount' => $invoices->total(),
             'parties' => Party::orderBy('name')->get(['id', 'name']),
             'assignees' => User::where('role', 'telecaller')->orderBy('name')->get(),
-            'cities' => self::CITIES,
+            'cities' => array_column(BusyCompanies::all(), 'label'),
         ];
     }
 
@@ -43,10 +51,43 @@ class OutstandingPageService
         $query = Invoice::with(['party', 'assignee', 'activePromise']);
 
         if (auth()->user()?->isAdmin()) {
-            $query->where('invoice_no', 'like', 'TCIPL%');
+            $this->limitToSalesInvoices($query);
         }
 
         return $query;
+    }
+
+    /**
+     * Admins see sales invoices only, not the journal (JV-) and payment (PV-)
+     * vouchers that also arrive in the outstanding feed.
+     *
+     * Each company numbers its bills differently -- Mumbai TCIPL/, Gujarat TCIG/,
+     * Pune TCIPLP -- so the prefix is matched per company. The previous single
+     * 'TCIPL%' hid all 319 Gujarat invoices and matched Pune's only because
+     * TCIPLP happens to begin with TCIPL.
+     */
+    private function limitToSalesInvoices(Builder $query): void
+    {
+        $companies = array_filter(
+            BusyCompanies::all(),
+            fn (array $company) => $company['invoice_prefixes'] !== [],
+        );
+
+        if ($companies === []) {
+            return;
+        }
+
+        $query->where(function (Builder $outer) use ($companies) {
+            foreach ($companies as $slug => $company) {
+                $outer->orWhere(function (Builder $scoped) use ($slug, $company) {
+                    $scoped->where('company', $slug)->where(function (Builder $prefixes) use ($company) {
+                        foreach ($company['invoice_prefixes'] as $prefix) {
+                            $prefixes->orWhere('invoice_no', 'like', $prefix.'%');
+                        }
+                    });
+                });
+            }
+        });
     }
 
     private function applyFilters(Builder $query, array $filters): Builder
@@ -69,19 +110,16 @@ class OutstandingPageService
         }
         if (! empty($filters['city'])) {
             $city = $filters['city'];
-            $query->whereHas('party', function ($q) use ($city) {
-                if ($city === 'Mumbai') {
-                    $q->whereIn('city', ['Mumbai', 'Navi Mumbai', 'Thane', 'Palghar', 'Bhiwandi']);
-                } elseif ($city === 'Gujarat') {
-                    $q->where('state', 'Gujarat')
-                        ->orWhere('city', 'Gujarat')
-                        ->orWhereIn('city', ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Gandhinagar', 'Ankleshwar', 'Bharuch', 'Vapi', 'Valsad', 'Dahej', 'Sanand', 'Halol', 'Nadiad', 'Morbi']);
-                } elseif ($city === 'Pune') {
-                    $q->where('city', 'Pune');
-                } else {
-                    $q->where('city', $city)->orWhere('state', $city);
-                }
-            });
+
+            // The three region names are now companies, answered by the column the
+            // sync stamps. They used to be guessed from the customer's own address,
+            // which put Mumbai-company ledgers under Pune and Gujarat whenever the
+            // customer happened to be based there.
+            if (BusyCompanies::exists($city)) {
+                $query->where('company', BusyCompanies::resolve($city));
+            } else {
+                $query->whereHas('party', fn ($q) => $q->where('city', $city)->orWhere('state', $city));
+            }
         }
         if (! empty($filters['status'])) {
             $status = $filters['status'];

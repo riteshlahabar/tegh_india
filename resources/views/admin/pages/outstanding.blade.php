@@ -17,7 +17,7 @@
       @endforeach
     </select>
     <select class="form-select" name="city">
-      <option value="">City</option>
+      <option value="">Region</option>
       @foreach($cities as $city)
         <option value="{{ $city }}" @selected(($filters['city'] ?? '') === $city)>{{ $city }}</option>
       @endforeach
