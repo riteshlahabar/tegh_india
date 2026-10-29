@@ -532,8 +532,13 @@ class BusyIntegrationTest extends TestCase
         $byCompany = $response->viewData('citiesByCompany');
 
         $this->assertSame(['Ahmedabad'], $byCompany['gujarat']);
-        $this->assertEqualsCanonicalizing(['Pune', 'Mumbai'], $byCompany['mumbai']);
         $this->assertSame(['Pune'], $byCompany['pune']);
+
+        // Mumbai's only town here is Pune, from the TCIPL/ invoice. 'Mumbai'
+        // belongs to the JV- party, which the page never shows, so offering it
+        // would give a city that returns nothing when picked.
+        $this->assertSame(['Pune'], $byCompany['mumbai']);
+        $this->assertNotContains('Mumbai', $byCompany['']);
     }
 
     public function test_an_old_link_sending_the_region_as_city_still_works(): void

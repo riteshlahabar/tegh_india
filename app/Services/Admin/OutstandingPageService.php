@@ -51,12 +51,22 @@ class OutstandingPageService
      */
     private function citiesByCompany(): array
     {
-        $rows = Party::query()
-            ->whereNotNull('city')
-            ->where('city', '!=', '')
+        // Built from the invoices actually on this page, not from every party in
+        // the table. Listing all known towns offered cities with nothing behind
+        // them, so picking one returned an empty result.
+        $query = Invoice::query()
+            ->join('parties', 'parties.id', '=', 'invoices.party_id')
+            ->whereNotNull('parties.city')
+            ->where('parties.city', '!=', '');
+
+        if (auth()->user()?->isAdmin()) {
+            $query->salesSeriesOnly();
+        }
+
+        $rows = $query
             ->distinct()
-            ->orderBy('city')
-            ->get(['company', 'city']);
+            ->orderBy('parties.city')
+            ->get(['invoices.company as company', 'parties.city as city']);
 
         $grouped = ['' => []];
 

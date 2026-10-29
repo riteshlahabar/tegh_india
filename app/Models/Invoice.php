@@ -87,12 +87,16 @@ class Invoice extends Model
             return $query;
         }
 
-        return $query->where(function (Builder $outer) use ($companies) {
+        // Columns are table-qualified because parties also has a `company` column,
+        // so this scope is ambiguous the moment it is used alongside a join.
+        $table = $query->getModel()->getTable();
+
+        return $query->where(function (Builder $outer) use ($companies, $table) {
             foreach ($companies as $slug => $company) {
-                $outer->orWhere(function (Builder $scoped) use ($slug, $company) {
-                    $scoped->where('company', $slug)->where(function (Builder $prefixes) use ($company) {
+                $outer->orWhere(function (Builder $scoped) use ($slug, $company, $table) {
+                    $scoped->where("{$table}.company", $slug)->where(function (Builder $prefixes) use ($company, $table) {
                         foreach ($company['invoice_prefixes'] as $prefix) {
-                            $prefixes->orWhere('invoice_no', 'like', $prefix.'%');
+                            $prefixes->orWhere("{$table}.invoice_no", 'like', $prefix.'%');
                         }
                     });
                 });
