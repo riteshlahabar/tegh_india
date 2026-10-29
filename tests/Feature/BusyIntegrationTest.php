@@ -499,6 +499,56 @@ class BusyIntegrationTest extends TestCase
             ->assertDontSee('JV-900/26-27');
     }
 
+    public function test_region_and_city_narrow_together(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        // Region alone.
+        $this->actingAs($admin)->get('/admin/outstanding?company=Mumbai')
+            ->assertOk()
+            ->assertSee('TCIPL/200/26-27')
+            ->assertDontSee('TCIG/100/26-27');
+
+        // Region plus a city inside it.
+        $this->actingAs($admin)->get('/admin/outstanding?company=Mumbai&city=Pune')
+            ->assertOk()
+            ->assertSee('TCIPL/200/26-27');
+
+        // A city that exists, but not in this region, must exclude everything
+        // rather than quietly widening back to the whole region.
+        $this->actingAs($admin)->get('/admin/outstanding?company=Mumbai&city=Ahmedabad')
+            ->assertOk()
+            ->assertDontSee('TCIPL/200/26-27')
+            ->assertDontSee('TCIG/100/26-27');
+    }
+
+    public function test_city_dropdown_lists_only_the_towns_of_its_region(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        $response = $this->actingAs($admin)->get('/admin/outstanding')->assertOk();
+        $byCompany = $response->viewData('citiesByCompany');
+
+        $this->assertSame(['Ahmedabad'], $byCompany['gujarat']);
+        $this->assertEqualsCanonicalizing(['Pune', 'Mumbai'], $byCompany['mumbai']);
+        $this->assertSame(['Pune'], $byCompany['pune']);
+    }
+
+    public function test_an_old_link_sending_the_region_as_city_still_works(): void
+    {
+        $this->seedOneInvoicePerCompany();
+        $admin = User::factory()->admin()->create();
+
+        // The mobile API and existing bookmarks send ?city=Gujarat meaning the
+        // region. That has to keep filtering by company, not by town.
+        $this->actingAs($admin)->get('/admin/outstanding?city=Gujarat')
+            ->assertOk()
+            ->assertSee('TCIG/100/26-27')
+            ->assertDontSee('TCIPL/200/26-27');
+    }
+
     private function seedOneInvoicePerCompany(): void
     {
         $rows = [

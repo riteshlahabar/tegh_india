@@ -35,7 +35,43 @@ class OutstandingPageService
             'parties' => Party::orderBy('name')->get(['id', 'name']),
             'assignees' => User::where('role', 'telecaller')->orderBy('name')->get(),
             'cities' => array_column(BusyCompanies::all(), 'label'),
+            'citiesByCompany' => $this->citiesByCompany(),
         ];
+    }
+
+    /**
+     * Customer towns per company, for the City dropdown that narrows a region.
+     *
+     * Apna Bazar has no branch or city field of its own -- BusyPayload::city()
+     * reads the town out of the party's address lines, so this is the only real
+     * geography the CRM holds. Key '' carries every town, for when no region is
+     * picked.
+     *
+     * @return array<string, list<string>>
+     */
+    private function citiesByCompany(): array
+    {
+        $rows = Party::query()
+            ->whereNotNull('city')
+            ->where('city', '!=', '')
+            ->distinct()
+            ->orderBy('city')
+            ->get(['company', 'city']);
+
+        $grouped = ['' => []];
+
+        foreach ($rows as $row) {
+            $company = (string) ($row->company ?? '');
+            $city = (string) $row->city;
+
+            $grouped[$company][] = $city;
+            $grouped[''][] = $city;
+        }
+
+        return array_map(
+            fn (array $cities) => array_values(array_unique($cities)),
+            $grouped,
+        );
     }
 
     public function exportQuery(array $filters): Builder
@@ -75,18 +111,28 @@ class OutstandingPageService
         if (! empty($filters['assigned'])) {
             $query->where('assigned_to', $filters['assigned']);
         }
+        // Region is the company whose books the row came from, answered by the
+        // column the sync stamps. It used to be guessed from the customer's own
+        // address, which filed Mumbai-company ledgers under Pune and Gujarat
+        // whenever the customer happened to be based there.
+        $company = $filters['company'] ?? null;
+
+        // Older links and the mobile API send the region as `city`. Honour that
+        // when it names a company and no explicit region was given.
+        if (empty($company) && ! empty($filters['city']) && BusyCompanies::exists($filters['city'])) {
+            $company = $filters['city'];
+            $filters['city'] = null;
+        }
+
+        if (! empty($company) && BusyCompanies::exists($company)) {
+            $query->where('company', BusyCompanies::resolve($company));
+        }
+
+        // City is the customer's own town, derived from their address by
+        // BusyPayload::city(). It narrows within a region rather than replacing it.
         if (! empty($filters['city'])) {
             $city = $filters['city'];
-
-            // The three region names are now companies, answered by the column the
-            // sync stamps. They used to be guessed from the customer's own address,
-            // which put Mumbai-company ledgers under Pune and Gujarat whenever the
-            // customer happened to be based there.
-            if (BusyCompanies::exists($city)) {
-                $query->where('company', BusyCompanies::resolve($city));
-            } else {
-                $query->whereHas('party', fn ($q) => $q->where('city', $city)->orWhere('state', $city));
-            }
+            $query->whereHas('party', fn ($q) => $q->where('city', $city)->orWhere('state', $city));
         }
         if (! empty($filters['status'])) {
             $status = $filters['status'];

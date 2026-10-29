@@ -10,17 +10,14 @@
         <option value="{{ $person }}" @selected(($filters['sales'] ?? '') === $person)>{{ $person }}</option>
       @endforeach
     </select>
-    <select class="form-select" name="branch">
-      <option value="">Branch</option>
-      @foreach($branches as $branch)
-        <option value="{{ $branch }}" @selected(($filters['branch'] ?? '') === $branch)>{{ $branch }}</option>
-      @endforeach
-    </select>
-    <select class="form-select" name="city">
+    <select class="form-select" name="company" id="regionFilter">
       <option value="">Region</option>
       @foreach($cities as $city)
-        <option value="{{ $city }}" @selected(($filters['city'] ?? '') === $city)>{{ $city }}</option>
+        <option value="{{ $city }}" @selected(($filters['company'] ?? '') === $city)>{{ $city }}</option>
       @endforeach
+    </select>
+    <select class="form-select" name="city" id="cityFilter" data-selected="{{ $filters['city'] ?? '' }}">
+      <option value="">City</option>
     </select>
     <select class="form-select" name="assigned">
       <option value="">Assigned User</option>
@@ -85,4 +82,45 @@
   </div>
   {{ $invoices->links() }}
 </div>
+
+<script>
+(function () {
+  // Apna Bazar has no branch field, so City is the only real geography the CRM
+  // holds -- BusyPayload::city() reads it from the party's address lines. The
+  // list narrows to the chosen region so Gujarat does not offer Thane.
+  const citiesByCompany = @json($citiesByCompany ?? []);
+  const region = document.getElementById('regionFilter');
+  const city = document.getElementById('cityFilter');
+  if (!region || !city) {
+    return;
+  }
+
+  function fill(keepSelection) {
+    const wanted = keepSelection ? (city.dataset.selected || '') : '';
+    const list = citiesByCompany[(region.value || '').toLowerCase()] || citiesByCompany[''] || [];
+
+    city.innerHTML = '<option value="">City</option>';
+    list.forEach(function (name) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      option.selected = name === wanted;
+      city.appendChild(option);
+    });
+
+    // A city from the previous region no longer exists in the list, so the
+    // filter would silently keep applying a value the user cannot see.
+    if (wanted && city.value !== wanted) {
+      city.value = '';
+    }
+  }
+
+  region.addEventListener('change', function () {
+    city.dataset.selected = '';
+    fill(false);
+  });
+
+  fill(true);
+})();
+</script>
 @endsection

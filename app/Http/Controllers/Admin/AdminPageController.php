@@ -41,7 +41,7 @@ class AdminPageController extends Controller
     public function outstanding(Request $request, OutstandingPageService $service): View
     {
         return $this->render('admin.pages.outstanding', $service->data($request->only([
-            'party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city',
+            'party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city', 'company',
         ])), [
             'activeNav' => 'outstanding',
             'pageTitle' => 'Outstanding',

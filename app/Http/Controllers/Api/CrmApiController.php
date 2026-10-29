@@ -83,7 +83,7 @@ class CrmApiController extends Controller
 
     public function outstanding(Request $request, OutstandingPageService $service)
     {
-        $filters = $request->only(['party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city']);
+        $filters = $request->only(['party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city', 'company']);
         $data = $service->data($filters);
 
         return response()->json(array_merge(

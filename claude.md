@@ -260,6 +260,28 @@ guessing. Tag everything `mumbai` in the migration, then sync the other two.
     derives the *customer's* city and is unchanged; the `Bhiwandi` string in
     `SettingsPageService` is a default office address, not a filter.
   - Suite now 25 tests; **still not run** (no `vendor/` locally).
+- [x] **Step 7 — Region → City cascade on Outstanding**
+  - **Branch is dead data.** `invoices.branch` is NULL for all 2,580 rows and the
+    dropdown rendered 0 options, because Apna Bazar has no branch field:
+    `get_outstanding` returns 7 fields and `get_accounts` 45, none of them
+    branch/station/depot/area. Sales Person is empty for the same reason.
+  - Replaced the dead Branch dropdown with **City**, the only real geography the
+    CRM holds — `BusyPayload::city()` reads the town from the party's address
+    lines. Picking a region narrows the city list to that company's towns.
+  - **Filter keys:** `company` = region (the synced company), `city` = the
+    customer's town. An old link or mobile-API call sending `?city=Gujarat` is
+    still read as a region, so bookmarks keep working.
+  - A city left selected from a previous region is cleared rather than silently
+    applying a filter the user can no longer see.
+  - `company` added to the filter allowlists in `AdminPageController`,
+    `CrmApiController` and `AdminController::exportOutstanding`.
+  - Suite now 28 tests.
+
+### Still dead, flagged not fixed
+
+`branch` and `sales_person` are empty everywhere and the API supplies neither.
+`reports.blade.php` still renders a Branch dropdown off `AdminSharedDataService`,
+which will also be empty. Needs a client answer on where branch should come from.
 
 ### Credential source — decided
 

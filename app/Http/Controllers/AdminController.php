@@ -352,7 +352,7 @@ class AdminController extends Controller
 
     public function exportOutstanding(Request $request, OutstandingPageService $service)
     {
-        $filters = $request->only(['party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city']);
+        $filters = $request->only(['party', 'invoice', 'sales', 'branch', 'assigned', 'status', 'aging', 'city', 'company']);
         $rows = $service->exportQuery($filters)->get();
 
         $filename = 'tegh-outstanding-'.now()->format('Ymd-His').'.csv';
