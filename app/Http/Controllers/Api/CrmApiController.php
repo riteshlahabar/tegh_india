@@ -180,7 +180,7 @@ class CrmApiController extends Controller
 
     public function calls(Request $request, CallHistoryPageService $service)
     {
-        $data = $service->data($request->only(['date', 'telecaller', 'outcome', 'party']));
+        $data = $service->data($request->only(['date', 'range', 'telecaller', 'outcome', 'party']));
 
         return response()->json(
             CrmPayload::page($data['calls'], fn (Call $call) => CrmPayload::call($call))
