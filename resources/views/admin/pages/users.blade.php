@@ -77,7 +77,15 @@
             &middot;
             <strong>{{ $user->city ?: 'All cities' }}</strong>
           </div>
-          @if(auth()->user()->isAdmin())
+          @if(auth()->user()->isAdmin() && $user->role !== 'telecaller')
+            {{-- Legacy accounts from the old sales portal (role `sales_executive`).
+                 They are not app logins, and the telecaller actions 404 on them,
+                 so the buttons are not offered. --}}
+            <div class="mt-3 text-muted" style="font-size:12px;">
+              Role <code>{{ $user->role ?: 'none' }}</code> &mdash; not a mobile-app
+              account. Scope and password are managed only for telecallers.
+            </div>
+          @elseif(auth()->user()->isAdmin())
             {{-- One form now: the password was the only field this accepted, so a
                  telecaller's scope could never be changed after creation. --}}
             <form method="POST" action="{{ route('admin.telecallers.update', $user) }}" class="mt-3">

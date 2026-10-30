@@ -10,6 +10,28 @@ use Illuminate\Validation\Rule;
 
 class TelecallerController extends Controller
 {
+    /**
+     * Why this account cannot be edited or removed here, or null if it can.
+     *
+     * Live data holds a third role, `sales_executive`, left over from the old
+     * sales portal -- two accounts in the production dump. The Users page used
+     * to offer "Remove telecaller" on them and these methods answered a bare
+     * 404, which looked like a broken page rather than a refused action.
+     */
+    private function notManageable(User $user): ?string
+    {
+        if ($user->isAdmin()) {
+            return $user->name.' is an administrator and cannot be changed here.';
+        }
+
+        if ($user->role !== 'telecaller') {
+            return $user->name.' has the role "'.($user->role ?: 'none').'", not telecaller. '
+                .'Only telecaller accounts are managed from this page.';
+        }
+
+        return null;
+    }
+
     public function store(Request $request)
     {
         abort_unless($request->user()?->isAdmin(), 403);
@@ -44,7 +66,10 @@ class TelecallerController extends Controller
     public function update(Request $request, User $user)
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($user->role === 'telecaller', 404);
+
+        if ($reason = $this->notManageable($user)) {
+            return redirect()->route('admin.users')->with('error', $reason);
+        }
 
         // The password used to be the only thing this accepted, so a
         // telecaller's scope could never be changed after creation.
@@ -72,7 +97,10 @@ class TelecallerController extends Controller
     public function destroy(Request $request, User $user)
     {
         abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($user->role === 'telecaller', 404);
+
+        if ($reason = $this->notManageable($user)) {
+            return redirect()->route('admin.users')->with('error', $reason);
+        }
 
         $name = $user->name;
         $user->delete();
