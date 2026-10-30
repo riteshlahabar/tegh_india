@@ -382,8 +382,23 @@ How SOLID lands here, concretely:
 ### Design system — lifted from Demandium customerapp
 
 The visual language comes from `C:\All Project\Demandium\Project\customerapp`, by
-client decision on 2026-10-30. Indigo `#4153B3` primary with orange `#FF9900`
-secondary on a white page.
+client decision on 2026-10-30. Demandium's own indigo `#4153B3` was replaced by
+the client-chosen `#C3A0D9` the same day; orange `#FF9900` secondary on a white
+page is unchanged.
+
+**`#C3A0D9` is a light tint, and that drives the whole chrome.** White on it
+measures ~2.2:1 contrast — below the 4.5:1 needed for readable text — while
+near-black measures 9.4:1. So:
+
+| Token | Value | Used for |
+|---|---|---|
+| `primary` | `#C3A0D9` | App bar and bottom-bar fill |
+| `onPrimary` | `#2E2136` | **All** text and icons on those bars — never white |
+| `primaryLight` | `#F1E8F7` | Tints behind icons and pills |
+| `primaryDark` | `#7B5595` | Small coloured text, links, filled buttons, the "Promise Given" status |
+| `primaryDeep` | `#4E3261` | With `primaryDark`, the hero-card gradient — the one place white text is correct |
+
+Anything new that sits on `primary` must use `onPrimary`, not `Colors.white`.
 
 Token files under `app/theme/`, mirroring Demandium's `util/`:
 
@@ -418,7 +433,7 @@ class` repositories and `go_router`. Only the presentation layer is theirs.
 ### Built so far
 
 Home screen, bottom navigation and app bars, with `SampleHomeRepository` standing
-in until `/api/queue` exists. `flutter analyze` clean, 4 widget tests passing.
+in until Phase 3 wires `/api/dashboard`. `flutter analyze` clean, 23 tests passing.
 
 - `app/theme/` — light + dark, Demandium tokens, Roboto in `assets/font/`
 - `app/router/app_router.dart` — `StatefulShellRoute.indexedStack`, so each tab
@@ -439,7 +454,7 @@ device themselves and reports back. Claude verifies with:
 ```bash
 cd telecaller_app
 flutter analyze                 # must be clean
-flutter test                    # 4 widget tests
+flutter test                    # 23 tests: 4 widget, 19 core
 ```
 
 The widget tests catch real layout faults — a `RenderFlex overflowed` assertion
@@ -473,7 +488,7 @@ full invoice payloads.
 | # | Phase | Builds | Endpoints |
 |---|---|---|---|
 | **0** | Backend prerequisites | ✅ **Done 2026-10-30** — see below | — |
-| **1** | Core infrastructure | `ApiClient` over `http`, token store in `shared_preferences`, typed errors, `AppConfig` base URL | — |
+| **1** | Core infrastructure | ✅ **Done 2026-10-30** — see below | — |
 | **2** | Splash + login + session | Splash, login, `SessionNotifier`, router redirect, logout, 401 handling | `POST /login`, `GET /me`, `POST /logout` |
 | **3** | Home on real data | `HttpHomeRepository` replaces `SampleHomeRepository` — one provider override, no view changes | `GET /dashboard` |
 | **4** | Outstanding | List with status/aging/city/company filters, pagination, search | `GET /outstanding` |
@@ -517,6 +532,41 @@ php artisan optimize:clear   # users.blade.php changed
 confirm the Outstanding page shows Mumbai sales invoices only, and that the count
 dropped from ~5,050 to ~1,916. Then sign in as `admin` and confirm the total is
 still 2,580 across all three companies.
+
+### Phase 1 — core infrastructure  *(2026-10-30)*
+
+Added `http` and `shared_preferences`. Nothing in the UI changed.
+
+```
+lib/core/
+  config/app_config.dart        apiBaseUrl (--dart-define overridable), requestTimeout
+  network/api_exception.dart    sealed ApiException, 8 cases
+  network/api_client.dart       ApiClient interface + HttpApiClient
+  storage/token_store.dart      TokenStore interface
+  storage/prefs_token_store.dart
+  providers.dart                sharedPreferences / tokenStore / apiClient
+```
+
+- **`ApiException` is sealed**, so a `switch` over it is exhaustive — adding a
+  case makes the compiler point at every screen that must handle it. Views
+  never see an `http` type or a status code.
+- **`HttpApiClient` has three jobs**: attach the bearer token, map transport
+  and status failures onto `ApiException`, decode the body. It holds no app
+  state. `onUnauthorized` is a callback, so "a 401 signs the user out" stays
+  session policy and is wired in Phase 2 — `core/` never imports a feature.
+- **Empty and null query values are dropped** rather than sent as `?city=`,
+  which Laravel's `!empty()` filter checks would treat as a real filter.
+- **`main()` is async** and loads `SharedPreferences` before the first frame,
+  overriding `sharedPreferencesProvider`. That is what lets the Phase 2 splash
+  decide where to go without a second async hop. The provider throws if read
+  without that override — a programming error, not a runtime state.
+- `--dart-define=API_BASE_URL=http://10.0.2.2:8000/api` points a device at a
+  local Laravel without editing source.
+
+**19 core tests** cover token attachment, query pruning, path joining, every
+status mapping (401 fires the callback exactly once, 422 carries Laravel's
+field errors), HTML-served-as-200, empty bodies, socket failure and timeout —
+all against `MockClient`, so they touch no network and no platform channel.
 
 ---
 
