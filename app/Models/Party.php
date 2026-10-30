@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\BusyCompanies;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,30 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Party extends Model
 {
+    /**
+     * The customers a given account is allowed to see.
+     *
+     * The mirror of Invoice::scopeVisibleTo(). Parties carry their own
+     * `company` (stamped by the sync) and `city` (read out of the address
+     * lines), so the scope reads them directly rather than joining invoices.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        if (! $user || ! $user->isScoped()) {
+            return $query;
+        }
+
+        if (filled($user->region) && BusyCompanies::exists($user->region)) {
+            $query->where($query->getModel()->getTable().'.company', BusyCompanies::resolve($user->region));
+        }
+
+        if (filled($user->city)) {
+            $query->where($query->getModel()->getTable().'.city', $user->city);
+        }
+
+        return $query;
+    }
+
     protected $fillable = [
         'name',
         'company',

@@ -120,11 +120,13 @@ class CrmApiController extends Controller
 
     public function customers(Request $request, CustomerPageService $service)
     {
-        $data = $service->data($request->query('q'));
+        // Paginated, unlike the web page: the unpaged shape sent every party
+        // with its whole invoice history, which is far too much for a phone.
+        $parties = $service->paged($request->query('q'));
 
-        return response()->json([
-            'data' => collect($data['parties'])->map(fn ($party) => CrmPayload::party($party))->values(),
-        ]);
+        return response()->json(
+            CrmPayload::page($parties, fn ($party) => CrmPayload::party($party))
+        );
     }
 
     public function customer(int $party, CustomerPageService $service)
