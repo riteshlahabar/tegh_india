@@ -54,6 +54,7 @@ class CrmApiController extends Controller
                 'open_invoices' => (int) $kpis['openInvoices'],
                 'overdue' => (float) $kpis['overdue'],
                 'overdue_inr' => inr($kpis['overdue']),
+                'overdue_count' => (int) $kpis['overdueCount'],
                 'due_today' => (float) $kpis['dueToday'],
                 'due_today_inr' => inr($kpis['dueToday']),
                 'due_today_count' => (int) $kpis['dueTodayCount'],
@@ -64,13 +65,25 @@ class CrmApiController extends Controller
                 'collected_this_month_inr' => inr($kpis['collectedThisMonth']),
                 'followups_today' => (int) $kpis['followupsToday'],
                 'completed_followups' => (int) $kpis['completedFollowups'],
+                'connected_today' => (int) $kpis['connectedToday'],
+                'promises_today' => (int) $kpis['promisesToday'],
             ],
             'aging' => collect($data['agingLabels'])->values()->map(fn ($label, $index) => [
                 'label' => $label,
                 'amount' => (float) $data['agingValues'][$index],
                 'amount_inr' => inr($data['agingValues'][$index]),
             ])->values(),
-            'followups' => collect($data['todayFollowups'])->map(fn (Invoice $invoice) => CrmPayload::invoice($invoice))->values(),
+            // The app's priority queue. `call_count` and `last_outcome` ride
+            // along here rather than in CrmPayload::invoice() so the extra two
+            // columns are only paid for on this endpoint's six rows.
+            'followups' => collect($data['todayFollowups'])->map(function (Invoice $invoice) {
+                $calls = $invoice->calls()->latest('called_at');
+
+                return CrmPayload::invoice($invoice) + [
+                    'call_count' => (clone $calls)->count(),
+                    'last_outcome' => (clone $calls)->value('outcome'),
+                ];
+            })->values(),
             'team' => collect($data['teamSnapshot'])->map(fn ($row) => [
                 'name' => $row['name'],
                 'initials' => $row['initials'],
