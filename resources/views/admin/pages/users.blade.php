@@ -6,27 +6,25 @@
   <div class="section-sub">Creates an app login. The telecaller signs in with this username and password on the Tegh Cables mobile app and can work the same outstanding, follow-up, call, WhatsApp, email and report screens.</div>
   <form method="POST" action="{{ route('admin.telecallers.store') }}" class="row g-2 align-items-end">
     @csrf
-    <div class="col-md-3">
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">Name</label>
       <input class="form-control" name="name" value="{{ old('name') }}" required maxlength="255">
     </div>
-    <div class="col-md-2">
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">Username</label>
       <input class="form-control" name="username" value="{{ old('username') }}" required maxlength="255" pattern="[A-Za-z0-9_\-]+" title="Letters, numbers, dash or underscore">
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">Email</label>
       <input class="form-control" type="email" name="email" value="{{ old('email') }}" required maxlength="255">
     </div>
-    <div class="col-md-2">
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">Password</label>
       <input class="form-control" type="text" name="password" required minlength="4" maxlength="255" autocomplete="new-password">
     </div>
-    <div class="col-md-2">
-      <label class="form-label" style="font-size:12px;font-weight:600;">Branch</label>
-      <input class="form-control" name="branch" value="{{ old('branch', 'All') }}" maxlength="255">
-    </div>
-    <div class="col-md-2">
+    {{-- Branch was a free-text field nothing ever read. Region and City are
+         what every query actually scopes by, so they replace it outright. --}}
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">Region</label>
       <select class="form-select" name="region" id="newRegion">
         <option value="">All regions</option>
@@ -35,7 +33,7 @@
         @endforeach
       </select>
     </div>
-    <div class="col-md-2">
+    <div class="col-md-4">
       <label class="form-label" style="font-size:12px;font-weight:600;">City</label>
       <select class="form-select" name="city" id="newCity" data-selected="{{ old('city') }}">
         <option value="">All cities</option>
@@ -171,7 +169,12 @@
     options: { plugins: { legend: { position: 'bottom' } } }
   });
 })();
+</script>
 
+{{-- Its own tag on purpose. Sharing one <script> with the chart meant a throw
+     from Chart.js stopped everything after it, so the City dropdowns silently
+     stayed empty while the Outstanding page's identical cascade worked. --}}
+<script>
 (function () {
   // Same cascade as the Outstanding page, and the same source:
   // OutstandingPageService::citiesByCompany(). Apna Bazar has no branch field,

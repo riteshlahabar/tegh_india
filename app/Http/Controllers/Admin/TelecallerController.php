@@ -41,7 +41,6 @@ class TelecallerController extends Controller
             'username' => 'required|string|max:255|alpha_dash|unique:users,username',
             'email' => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:4|max:255',
-            'branch' => 'nullable|string|max:255',
             'region' => ['nullable', 'string', Rule::in(array_keys(BusyCompanies::all()))],
             'city' => 'nullable|string|max:255',
         ]);
@@ -53,7 +52,10 @@ class TelecallerController extends Controller
             'password' => $validated['password'],
             'role' => 'telecaller',
             'initials' => crm_initials($validated['name']),
-            'branch' => $validated['branch'] ?: 'All',
+            // The column is still NOT NULL-ish in practice and reports.blade.php
+            // reads invoices.branch, so keep writing the old default rather than
+            // leaving it empty. Nothing queries users.branch.
+            'branch' => 'All',
             'region' => $validated['region'] ?: null,
             'city' => $validated['city'] ?: null,
         ]);
