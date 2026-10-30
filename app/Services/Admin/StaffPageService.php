@@ -7,10 +7,19 @@ use App\Models\Invoice;
 use App\Models\Party;
 use App\Models\PaymentPromise;
 use App\Models\User;
+use App\Support\BusyCompanies;
 use Carbon\Carbon;
 
 class StaffPageService
 {
+    /**
+     * The Region -> City cascade is owned by OutstandingPageService, which
+     * builds it from the invoices that actually exist. Reusing it here means
+     * the dropdown that ASSIGNS a scope offers exactly the towns the scoped
+     * list will later match.
+     */
+    public function __construct(private readonly OutstandingPageService $outstanding) {}
+
     public function data(): array
     {
         $today = Carbon::today();
@@ -34,6 +43,8 @@ class StaffPageService
 
         return [
             'team' => $team,
+            'companies' => BusyCompanies::all(),
+            'citiesByCompany' => $this->outstanding->citiesByCompany(),
             'parties' => Party::orderBy('name')->get(['id', 'name', 'assigned_to']),
             'chartLabels' => $team->filter(fn ($row) => $row['user']->role === 'telecaller')->pluck('user.name')->values(),
             'chartCalls' => $team->filter(fn ($row) => $row['user']->role === 'telecaller')->pluck('calls')->values(),

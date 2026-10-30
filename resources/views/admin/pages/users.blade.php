@@ -26,7 +26,25 @@
       <label class="form-label" style="font-size:12px;font-weight:600;">Branch</label>
       <input class="form-control" name="branch" value="{{ old('branch', 'All') }}" maxlength="255">
     </div>
+    <div class="col-md-2">
+      <label class="form-label" style="font-size:12px;font-weight:600;">Region</label>
+      <select class="form-select" name="region" id="newRegion">
+        <option value="">All regions</option>
+        @foreach(($companies ?? []) as $slug => $company)
+          <option value="{{ $slug }}" @selected(old('region') === $slug)>{{ $company['label'] }}</option>
+        @endforeach
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" style="font-size:12px;font-weight:600;">City</label>
+      <select class="form-select" name="city" id="newCity" data-selected="{{ old('city') }}">
+        <option value="">All cities</option>
+      </select>
+    </div>
     <div class="col-12">
+      <div class="text-muted mb-2" style="font-size:12px;">
+        Region and city scope everything this account sees &mdash; outstanding, follow-ups and the mobile app. Leave both blank for every company.
+      </div>
       <button class="btn btn-crm-primary" type="submit"><i class="fa-solid fa-user-plus"></i> Add telecaller</button>
     </div>
   </form>
@@ -53,12 +71,37 @@
             <div class="col-6"><div class="stat-mini"><div class="l">PTP Created</div><div class="v">{{ $row['ptp'] }}</div></div></div>
             <div class="col-6"><div class="stat-mini"><div class="l">Collected</div><div class="v" style="font-size:14px;">{{ inr($row['collected']) }}</div></div></div>
           </div>
+          <div class="mt-2" style="font-size:11px;color:var(--muted);">
+            Scope:
+            <strong>{{ $user->region ? ($companies[$user->region]['label'] ?? $user->region) : 'All regions' }}</strong>
+            &middot;
+            <strong>{{ $user->city ?: 'All cities' }}</strong>
+          </div>
           @if(auth()->user()->isAdmin())
-            <form method="POST" action="{{ route('admin.telecallers.update', $user) }}" class="d-flex gap-2 mt-3">
+            {{-- One form now: the password was the only field this accepted, so a
+                 telecaller's scope could never be changed after creation. --}}
+            <form method="POST" action="{{ route('admin.telecallers.update', $user) }}" class="mt-3">
               @csrf
               @method('PUT')
-              <input class="form-control form-control-sm" type="text" name="password" placeholder="New app password" required minlength="4" autocomplete="new-password">
-              <button class="btn btn-crm-outline btn-sm" type="submit">Reset</button>
+              <div class="row g-2">
+                <div class="col-6">
+                  <select class="form-select form-select-sm js-region" name="region" data-target="city-{{ $user->id }}">
+                    <option value="">All regions</option>
+                    @foreach(($companies ?? []) as $slug => $company)
+                      <option value="{{ $slug }}" @selected($user->region === $slug)>{{ $company['label'] }}</option>
+                    @endforeach
+                  </select>
+                </div>
+                <div class="col-6">
+                  <select class="form-select form-select-sm js-city" id="city-{{ $user->id }}" name="city" data-selected="{{ $user->city }}">
+                    <option value="">All cities</option>
+                  </select>
+                </div>
+                <div class="col-12 d-flex gap-2">
+                  <input class="form-control form-control-sm" type="text" name="password" placeholder="New app password (optional)" minlength="4" autocomplete="new-password">
+                  <button class="btn btn-crm-outline btn-sm" type="submit">Save</button>
+                </div>
+              </div>
             </form>
             <form method="POST" action="{{ route('admin.telecallers.destroy', $user) }}" class="mt-2" onsubmit="return confirm('Remove {{ $user->name }}? Past calls stay on the accounts.')">
               @csrf
@@ -118,6 +161,52 @@
       ]
     },
     options: { plugins: { legend: { position: 'bottom' } } }
+  });
+})();
+
+(function () {
+  // Same cascade as the Outstanding page, and the same source:
+  // OutstandingPageService::citiesByCompany(). Apna Bazar has no branch field,
+  // so the town read out of the party's address is the only geography there is.
+  // Narrowing by region keeps Gujarat from offering Thane.
+  const citiesByCompany = @json($citiesByCompany ?? []);
+
+  function fill(region, city) {
+    const wanted = city.dataset.selected || '';
+    const list = citiesByCompany[(region.value || '').toLowerCase()] || citiesByCompany[''] || [];
+
+    city.innerHTML = '<option value="">All cities</option>';
+    list.forEach(function (name) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      option.selected = name === wanted;
+      city.appendChild(option);
+    });
+
+    // A town from the previous region is no longer in the list, so the scope
+    // would silently keep a value the admin cannot see.
+    if (wanted && city.value !== wanted) {
+      city.dataset.selected = '';
+    }
+  }
+
+  function bind(region, city) {
+    if (!region || !city) return;
+    fill(region, city);
+    region.addEventListener('change', function () {
+      city.dataset.selected = '';
+      fill(region, city);
+    });
+    city.addEventListener('change', function () {
+      city.dataset.selected = city.value;
+    });
+  }
+
+  bind(document.getElementById('newRegion'), document.getElementById('newCity'));
+
+  document.querySelectorAll('.js-region').forEach(function (region) {
+    bind(region, document.getElementById(region.dataset.target));
   });
 })();
 </script>

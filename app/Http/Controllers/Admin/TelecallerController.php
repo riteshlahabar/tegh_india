@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\BusyCompanies;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class TelecallerController extends Controller
 {
@@ -18,6 +20,8 @@ class TelecallerController extends Controller
             'email' => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:4|max:255',
             'branch' => 'nullable|string|max:255',
+            'region' => ['nullable', 'string', Rule::in(array_keys(BusyCompanies::all()))],
+            'city' => 'nullable|string|max:255',
         ]);
 
         User::create([
@@ -28,6 +32,8 @@ class TelecallerController extends Controller
             'role' => 'telecaller',
             'initials' => crm_initials($validated['name']),
             'branch' => $validated['branch'] ?: 'All',
+            'region' => $validated['region'] ?: null,
+            'city' => $validated['city'] ?: null,
         ]);
 
         return redirect()
@@ -40,16 +46,27 @@ class TelecallerController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($user->role === 'telecaller', 404);
 
+        // The password used to be the only thing this accepted, so a
+        // telecaller's scope could never be changed after creation.
         $validated = $request->validate([
-            'password' => 'required|string|min:4|max:255',
+            'password' => 'nullable|string|min:4|max:255',
+            'region' => ['nullable', 'string', Rule::in(array_keys(BusyCompanies::all()))],
+            'city' => 'nullable|string|max:255',
         ]);
 
-        $user->password = $validated['password'];
+        if (filled($validated['password'] ?? null)) {
+            $user->password = $validated['password'];
+        }
+
+        // A blank region or city clears the scope, which is how an account is
+        // put back to seeing every company.
+        $user->region = $validated['region'] ?: null;
+        $user->city = $validated['city'] ?: null;
         $user->save();
 
         return redirect()
             ->route('admin.users')
-            ->with('success', 'Password updated for '.$user->name.'.');
+            ->with('success', $user->name.' updated.');
     }
 
     public function destroy(Request $request, User $user)

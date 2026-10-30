@@ -94,13 +94,9 @@ class DashboardPageService
 
     private function openInvoices(): Builder
     {
-        $query = Invoice::query()->where('outstanding', '>', 0);
-
-        if (auth()->user()?->isAdmin()) {
-            $query->salesSeriesOnly();
-        }
-
-        return $query;
+        return Invoice::query()
+            ->where('outstanding', '>', 0)
+            ->visibleTo(auth()->user());
     }
 
     private function empty(): array

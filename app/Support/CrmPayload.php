@@ -24,6 +24,15 @@ class CrmPayload
             'role_label' => $user->isAdmin() ? 'Administrator' : 'Payment Follow-up Executive',
             'initials' => $user->initials ?: crm_initials($user->name),
             'branch' => $user->branch,
+            // What this account is scoped to. The mobile app prints these in
+            // its header, and they are what every list is already filtered by,
+            // so the app never has to send them as query parameters.
+            'region' => $user->region,
+            'region_label' => $user->region
+                ? (BusyCompanies::all()[$user->region]['label'] ?? $user->region)
+                : null,
+            'city' => $user->city,
+            'scoped' => $user->isScoped(),
         ];
     }
 

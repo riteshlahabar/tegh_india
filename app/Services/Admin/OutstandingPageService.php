@@ -49,21 +49,16 @@ class OutstandingPageService
      *
      * @return array<string, list<string>>
      */
-    private function citiesByCompany(): array
+    public function citiesByCompany(): array
     {
         // Built from the invoices actually on this page, not from every party in
         // the table. Listing all known towns offered cities with nothing behind
         // them, so picking one returned an empty result.
-        $query = Invoice::query()
+        $rows = Invoice::query()
             ->join('parties', 'parties.id', '=', 'invoices.party_id')
             ->whereNotNull('parties.city')
-            ->where('parties.city', '!=', '');
-
-        if (auth()->user()?->isAdmin()) {
-            $query->salesSeriesOnly();
-        }
-
-        $rows = $query
+            ->where('parties.city', '!=', '')
+            ->visibleTo(auth()->user())
             ->distinct()
             ->orderBy('parties.city')
             ->get(['invoices.company as company', 'parties.city as city']);
@@ -94,13 +89,8 @@ class OutstandingPageService
 
     private function baseQuery(): Builder
     {
-        $query = Invoice::with(['party', 'assignee', 'activePromise']);
-
-        if (auth()->user()?->isAdmin()) {
-            $query->salesSeriesOnly();
-        }
-
-        return $query;
+        return Invoice::with(['party', 'assignee', 'activePromise'])
+            ->visibleTo(auth()->user());
     }
 
     private function applyFilters(Builder $query, array $filters): Builder

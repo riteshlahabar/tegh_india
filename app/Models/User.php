@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'username', 'email', 'password', 'role', 'initials', 'branch'])]
+#[Fillable(['name', 'username', 'email', 'password', 'role', 'initials', 'branch', 'region', 'city'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -28,6 +28,25 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    /**
+     * Counterpart to isAdmin(). It was called in four unrouted places and
+     * defined nowhere, so wiring any of them up would have fataled.
+     */
+    public function isTelecaller(): bool
+    {
+        return $this->role === 'telecaller';
+    }
+
+    /**
+     * Whether this account is pinned to one company's books. Admins never are,
+     * and a telecaller with neither field set still sees everything -- which is
+     * what every account created before this migration looks like.
+     */
+    public function isScoped(): bool
+    {
+        return ! $this->isAdmin() && (filled($this->region) || filled($this->city));
     }
 
     public function invoices(): HasMany

@@ -11,6 +11,7 @@ class FollowupPageService
     {
         $today = Carbon::today();
         $query = Invoice::with(['party', 'assignee', 'activePromise'])
+            ->visibleTo(auth()->user())
             ->where('outstanding', '>', 0)
             ->where(function ($q) use ($today) {
                 $q->whereNull('next_followup_on')

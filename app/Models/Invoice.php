@@ -76,6 +76,41 @@ class Invoice extends Model
      * A single hardcoded 'TCIPL%' hid all 319 Gujarat invoices and matched Pune's
      * only because TCIPLP happens to begin with TCIPL.
      */
+    /**
+     * Everything a given account is allowed to see, in one place.
+     *
+     * Two rules, and both used to be wrong:
+     *
+     * 1. `salesSeriesOnly()` now applies to everyone. It was guarded by
+     *    `isAdmin()`, so a telecaller saw the raw ~5,050-row Mumbai feed --
+     *    journal (`JV-`) and payment (`PV-`) vouchers included -- against an
+     *    admin's 1,916 sales invoices. Backwards: the role with less authority
+     *    saw more rows, most with no customer to call.
+     * 2. A scoped telecaller sees only their own region and city.
+     *
+     * Every list the app and the web pages render goes through here, so the
+     * two rules cannot drift apart across services.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        $query->salesSeriesOnly();
+
+        if (! $user || ! $user->isScoped()) {
+            return $query;
+        }
+
+        if (filled($user->region) && BusyCompanies::exists($user->region)) {
+            $query->where($query->getModel()->getTable().'.company', BusyCompanies::resolve($user->region));
+        }
+
+        if (filled($user->city)) {
+            $city = $user->city;
+            $query->whereHas('party', fn ($q) => $q->where('city', $city));
+        }
+
+        return $query;
+    }
+
     public function scopeSalesSeriesOnly(Builder $query): Builder
     {
         $companies = array_filter(

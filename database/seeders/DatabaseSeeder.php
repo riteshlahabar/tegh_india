@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             'role' => 'telecaller',
             'initials' => 'AK',
             'branch' => 'Mumbai HQ',
+            'region' => 'mumbai',
         ]);
         User::create([
             'name' => 'Javed',
@@ -38,6 +39,7 @@ class DatabaseSeeder extends Seeder
             'role' => 'telecaller',
             'initials' => 'JV',
             'branch' => 'Bhiwandi Plant',
+            'region' => 'mumbai',
         ]);
         User::create([
             'name' => 'Amol',
@@ -47,6 +49,7 @@ class DatabaseSeeder extends Seeder
             'role' => 'telecaller',
             'initials' => 'AM',
             'branch' => 'Pune Branch',
+            'region' => 'pune',
         ]);
 
         AppSetting::setValue('company_name', 'Tegh Cables India Pvt. Ltd.');
