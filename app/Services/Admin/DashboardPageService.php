@@ -83,15 +83,17 @@ class DashboardPageService
         // all -- so the list led with crore-sized "Not Due" rows nobody had
         // a reason to ring today.
         //
-        // It is money that is actually payable now: due today or already
-        // overdue, and in the dial queue. An invoice falling due next month
-        // is not a priority call, however large it is. Oldest first, then by
-        // size, so the worst debt leads.
+        // Today's dues only -- invoices whose due date *is* today. Overdue
+        // bills are deliberately not here: they have their own tile and their
+        // own filter on the Outstanding list, and mixing them in is what
+        // buried today's actual work. Biggest first.
+        //
+        // Still inside the dial queue, so an invoice due today that someone
+        // has already agreed to ring next week stays out of it.
         $todayFollowups = $this->dialQueue()
             ->with(['party', 'assignee', 'activePromise'])
             ->whereNotNull('due_date')
-            ->whereDate('due_date', '<=', $today)
-            ->orderBy('due_date')
+            ->whereDate('due_date', $today)
             ->orderByDesc('outstanding')
             ->take(6)
             ->get();
