@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\Party;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CustomerPageService
 {
@@ -61,7 +62,11 @@ class CustomerPageService
         $query = Party::query()
             ->with([
                 'assignee',
-                'invoices' => fn (Builder $q) => $q->visibleTo($user)->with('activePromise'),
+                // HasMany, not Builder: an eager-load constraint closure is
+                // handed the relation itself. Typed as Builder this threw a
+                // TypeError on every call, so GET /customers answered 500 and
+                // the app's Customers tab came up empty.
+                'invoices' => fn (HasMany $q) => $q->visibleTo($user)->with('activePromise'),
             ])
             ->visibleTo($user)
             ->orderBy('name');
