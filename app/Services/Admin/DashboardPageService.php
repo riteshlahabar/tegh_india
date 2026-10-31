@@ -45,12 +45,7 @@ class DashboardPageService
             $collectedThisMonth = (float) Invoice::sum('received_amount');
         }
 
-        $followupsToday = $this->openInvoices()->with(['party', 'assignee', 'activePromise'])
-            ->where(function ($q) use ($today) {
-                $q->whereNull('next_followup_on')
-                    ->orWhereDate('next_followup_on', '>=', $today);
-            })
-            ->count();
+        $followupsToday = $this->dialQueue()->count();
 
         // "Calls today" means this telecaller's own calls. It counted every
         // user's calls before, so each telecaller saw the whole team's number
@@ -82,7 +77,21 @@ class DashboardPageService
 
         $collectionTarget = 6000000;
 
-        $todayFollowups = $this->openInvoices()->with(['party', 'assignee', 'activePromise'])
+        // The app's "Priority calls" and the web dashboard's follow-up table.
+        // This was `openInvoices()->orderByDesc('outstanding')->take(6)` --
+        // the six largest open invoices, with no due or follow-up filter at
+        // all -- so the list led with crore-sized "Not Due" rows nobody had
+        // a reason to ring today.
+        //
+        // It is money that is actually payable now: due today or already
+        // overdue, and in the dial queue. An invoice falling due next month
+        // is not a priority call, however large it is. Oldest first, then by
+        // size, so the worst debt leads.
+        $todayFollowups = $this->dialQueue()
+            ->with(['party', 'assignee', 'activePromise'])
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<=', $today)
+            ->orderBy('due_date')
             ->orderByDesc('outstanding')
             ->take(6)
             ->get();
@@ -130,6 +139,29 @@ class DashboardPageService
         return Invoice::query()
             ->where('outstanding', '>', 0)
             ->visibleTo(auth()->user());
+    }
+
+    /**
+     * Today's dial queue, as agreed for the mobile app: an open invoice that
+     * has never been scheduled, or whose follow-up fell due today or earlier.
+     *
+     * The old count asked for `next_followup_on >= today`, which is the
+     * opposite -- it counted every invoice scheduled for some future date
+     * plus every unscheduled one, so "Follow-ups today" read as essentially
+     * the whole book (2,136 on live) and the home card's progress bar had a
+     * target nobody could ever reach.
+     *
+     * Both the count and the priority list come through here so they cannot
+     * disagree about what "today's work" means.
+     */
+    private function dialQueue(): Builder
+    {
+        $today = Carbon::today();
+
+        return $this->openInvoices()->where(function (Builder $query) use ($today) {
+            $query->whereNull('next_followup_on')
+                ->orWhereDate('next_followup_on', '<=', $today);
+        });
     }
 
     private function empty(): array
