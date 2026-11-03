@@ -99,12 +99,17 @@ class CustomerPageService
             ->where('party_id', $party->id)
             ->visibleTo(auth()->user())
             ->with(['activePromise', 'assignee'])
-            ->orderByDesc('outstanding')
+            ->orderByDesc('due_date')
             ->get();
+
+        $totalOutstanding = $invoices
+            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()))
+            ->sum('outstanding');
 
         return [
             'party' => $party,
             'invoices' => $invoices,
+            'totalOutstanding' => $totalOutstanding,
             'calls' => $party->calls()
                 ->with('telecaller', 'invoice')
                 ->latest('called_at')
