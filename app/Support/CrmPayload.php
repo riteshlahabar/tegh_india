@@ -83,7 +83,9 @@ class CrmPayload
         $outstanding = $party->getAttribute('total_outstanding');
         if ($outstanding === null) {
             $outstanding = $party->relationLoaded('invoices')
-                ? $party->invoices->sum('outstanding')
+                ? $party->invoices
+                    ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()))
+                    ->sum('outstanding')
                 : $party->totalOutstanding();
         }
 

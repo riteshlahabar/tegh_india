@@ -84,7 +84,7 @@ class Party extends Model
 
     public function totalOutstanding(): float
     {
-        return (float) $this->invoices()->sum('outstanding');
+        return (float) $this->invoices()->whereDate('due_date', '<=', today())->sum('outstanding');
     }
 
     public function callableInvoice(): ?Invoice

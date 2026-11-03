@@ -28,7 +28,7 @@ class CustomerPageService
         $this->applySearch($query, $search);
 
         $parties = $query->get()->map(function (Party $party) {
-            $party->setAttribute('total_outstanding', $party->invoices->sum('outstanding'));
+            $party->setAttribute('total_outstanding', $this->dueByToday($party));
             $party->setAttribute('invoice_count', $party->invoices->count());
             $party->setAttribute('rollup_status', $party->rollupStatus());
 
@@ -76,7 +76,7 @@ class CustomerPageService
         $parties = $query->paginate($perPage)->withQueryString();
 
         $parties->getCollection()->transform(function (Party $party) {
-            $party->setAttribute('total_outstanding', $party->invoices->sum('outstanding'));
+            $party->setAttribute('total_outstanding', $this->dueByToday($party));
             $party->setAttribute('invoice_count', $party->invoices->count());
             $party->setAttribute('rollup_status', $party->rollupStatus());
 
@@ -84,6 +84,18 @@ class CustomerPageService
         });
 
         return $parties;
+    }
+
+    /**
+     * Outstanding due up to and including today -- overdue plus due-today,
+     * excluding invoices not yet due. Invoices are already eager-loaded by
+     * both callers, so this filters in PHP rather than re-querying.
+     */
+    private function dueByToday(Party $party): float
+    {
+        return (float) $party->invoices
+            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()))
+            ->sum('outstanding');
     }
 
     public function show(int $id): array
