@@ -88,14 +88,23 @@ class CustomerPageService
 
     /**
      * Outstanding due up to and including today -- overdue plus due-today,
-     * excluding invoices not yet due. Invoices are already eager-loaded by
-     * both callers, so this filters in PHP rather than re-querying.
+     * excluding invoices not yet due and invoices already paid off (no point
+     * counting a past due date once nothing is owed on it). Invoices are
+     * already eager-loaded by both callers, so this filters in PHP rather
+     * than re-querying.
      */
     private function dueByToday(Party $party): float
     {
-        return (float) $party->invoices
-            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()))
-            ->sum('outstanding');
+        return (float) $this->pendingDueByToday($party->invoices)->sum('outstanding');
+    }
+
+    private function pendingDueByToday($invoices)
+    {
+        return $invoices->filter(
+            fn (Invoice $invoice) => (float) $invoice->outstanding > 0
+                && $invoice->due_date
+                && $invoice->due_date->lte(today())
+        );
     }
 
     public function show(int $id): array
@@ -114,8 +123,7 @@ class CustomerPageService
             ->orderByDesc('due_date')
             ->get();
 
-        $dueByToday = $invoices
-            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()));
+        $dueByToday = $this->pendingDueByToday($invoices);
 
         return [
             'party' => $party,
