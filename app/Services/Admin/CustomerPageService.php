@@ -114,14 +114,14 @@ class CustomerPageService
             ->orderByDesc('due_date')
             ->get();
 
-        $totalOutstanding = $invoices
-            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()))
-            ->sum('outstanding');
+        $dueByToday = $invoices
+            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lte(today()));
 
         return [
             'party' => $party,
             'invoices' => $invoices,
-            'totalOutstanding' => $totalOutstanding,
+            'totalOutstanding' => $dueByToday->sum('outstanding'),
+            'dueInvoiceCount' => $dueByToday->count(),
             'calls' => $party->calls()
                 ->with('telecaller', 'invoice')
                 ->latest('called_at')

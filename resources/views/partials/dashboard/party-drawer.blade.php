@@ -9,7 +9,7 @@
     <div class="d-flex justify-content-between"><span class="text-muted">Payment Terms</span><span>{{ $party->payment_terms }}</span></div>
   </div>
   <div class="row g-2 mb-3">
-    <div class="col-12"><div class="stat-mini" style="background:var(--red-bg);"><div class="l" style="color:var(--red);">Total Outstanding</div><div class="v" style="color:var(--red);font-size:19px;">{{ inr($totalOutstanding) }}</div></div></div>
+    <div class="col-12"><div class="stat-mini" style="background:var(--red-bg);"><div class="l" style="color:var(--red);">Total Outstanding</div><div class="v" style="color:var(--red);font-size:19px;">{{ inr($totalOutstanding) }} <span style="font-size:13px;font-weight:400;">({{ $dueInvoiceCount }} {{ $dueInvoiceCount === 1 ? 'invoice' : 'invoices' }})</span></div></div></div>
   </div>
   <div class="section-title" style="font-size:12.5px;">Invoice Summary</div>
   <div class="table-wrap mb-3">
