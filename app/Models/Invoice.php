@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\BusyCompanies;
+use App\Support\PartyDues;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -235,6 +236,11 @@ class Invoice extends Model
     {
         $this->loadMissing(['party', 'activePromise']);
 
+        // The customer's whole pending ledger, not just this bill. The WhatsApp
+        // and call modals show it, because that is the figure the reminder
+        // templates quote and the party drawer prints.
+        $dues = PartyDues::forInvoice($this);
+
         return [
             'id' => $this->id,
             'party' => $this->party?->name,
@@ -249,6 +255,9 @@ class Invoice extends Model
             'po_no' => $this->po_no,
             'outstanding' => $this->outstanding,
             'outstanding_inr' => inr($this->outstanding),
+            'party_outstanding' => $dues->total,
+            'party_outstanding_inr' => $dues->totalInr(),
+            'party_due_count' => $dues->count,
             'due_date' => optional($this->due_date)->toDateString(),
             'due_date_label' => crm_date($this->due_date),
             'promise_amount' => $this->activePromise?->amount ?? $this->outstanding,

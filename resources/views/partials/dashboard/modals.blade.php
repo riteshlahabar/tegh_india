@@ -80,7 +80,8 @@
             <div class="col-6"><div class="stat-mini"><div class="l">Party</div><div class="v" style="font-size:13px;" id="waParty"></div></div></div>
             <div class="col-6"><div class="stat-mini"><div class="l">Mobile</div><div class="v" style="font-size:13px;" id="waMobile"></div></div></div>
             <div class="col-6"><div class="stat-mini"><div class="l">Invoice</div><div class="v" style="font-size:13px;" id="waInvoice"></div></div></div>
-            <div class="col-6"><div class="stat-mini"><div class="l">Outstanding</div><div class="v" style="font-size:13px;" id="waOutstanding"></div></div></div>
+            {{-- The party's whole pending ledger, matching the drawer and the message. --}}
+            <div class="col-6"><div class="stat-mini"><div class="l">Total Outstanding</div><div class="v" style="font-size:13px;" id="waOutstanding"></div></div></div>
           </div>
           <label class="form-label" style="font-size:12px;font-weight:600;">Message Template</label>
           <div class="row g-2 mb-3" id="waTemplates">

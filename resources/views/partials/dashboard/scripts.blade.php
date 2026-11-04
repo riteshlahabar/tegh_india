@@ -79,7 +79,12 @@ async function openWaModal(id) {
   document.getElementById('waParty').textContent = r.party;
   document.getElementById('waMobile').textContent = r.mobile;
   document.getElementById('waInvoice').textContent = r.invoice_no;
-  document.getElementById('waOutstanding').textContent = r.outstanding_inr;
+  // The party's total pending dues, not this one bill -- the same figure the
+  // drawer shows and the reminder templates quote, so the telecaller sees the
+  // amount that is actually going into the message.
+  document.getElementById('waOutstanding').textContent =
+    (r.party_outstanding_inr ?? r.outstanding_inr)
+    + (r.party_due_count > 1 ? ' (' + r.party_due_count + ' invoices)' : '');
   // Clear the stale message from whichever invoice was last previewed --
   // otherwise it sits on screen (showing the previous outstanding amount)
   // until the preview fetch below resolves.

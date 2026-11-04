@@ -4,6 +4,7 @@ namespace App\Services\Admin;
 
 use App\Models\Invoice;
 use App\Models\Party;
+use App\Support\PartyDues;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -92,19 +93,14 @@ class CustomerPageService
      * counting a past due date once nothing is owed on it). Invoices are
      * already eager-loaded by both callers, so this filters in PHP rather
      * than re-querying.
+     *
+     * The filter itself lives in {@see PartyDues}, because the WhatsApp
+     * reminder templates quote the same figure and the two drifting apart is
+     * what made a reminder read as the wrong amount.
      */
     private function dueByToday(Party $party): float
     {
-        return (float) $this->pendingDueByToday($party->invoices)->sum('outstanding');
-    }
-
-    private function pendingDueByToday($invoices)
-    {
-        return $invoices->filter(
-            fn (Invoice $invoice) => (float) $invoice->outstanding > 0
-                && $invoice->due_date
-                && $invoice->due_date->lte(today())
-        );
+        return PartyDues::fromInvoices($party->invoices)->total;
     }
 
     public function show(int $id): array
@@ -123,13 +119,13 @@ class CustomerPageService
             ->orderByDesc('due_date')
             ->get();
 
-        $dueByToday = $this->pendingDueByToday($invoices);
+        $dues = PartyDues::fromInvoices($invoices);
 
         return [
             'party' => $party,
             'invoices' => $invoices,
-            'totalOutstanding' => $dueByToday->sum('outstanding'),
-            'dueInvoiceCount' => $dueByToday->count(),
+            'totalOutstanding' => $dues->total,
+            'dueInvoiceCount' => $dues->count,
             'calls' => $party->calls()
                 ->with('telecaller', 'invoice')
                 ->latest('called_at')
