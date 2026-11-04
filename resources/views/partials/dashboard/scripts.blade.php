@@ -71,6 +71,7 @@ function toggleCmPromise() {
 }
 
 let activeWaInvoiceId = null;
+let waPreviewToken = 0;
 async function openWaModal(id) {
   const r = await fetchInvoice(id);
   activeWaInvoiceId = id;
@@ -79,6 +80,10 @@ async function openWaModal(id) {
   document.getElementById('waMobile').textContent = r.mobile;
   document.getElementById('waInvoice').textContent = r.invoice_no;
   document.getElementById('waOutstanding').textContent = r.outstanding_inr;
+  // Clear the stale message from whichever invoice was last previewed --
+  // otherwise it sits on screen (showing the previous outstanding amount)
+  // until the preview fetch below resolves.
+  document.getElementById('waMessage').value = '';
   pickWaTemplate('Payment Reminder');
   bootstrap.Modal.getOrCreateInstance(document.getElementById('waModal')).show();
 }
@@ -87,10 +92,16 @@ async function pickWaTemplate(name) {
   document.querySelectorAll('#waTemplates .template-pill').forEach(p => p.classList.toggle('active', p.dataset.tpl === name));
   document.getElementById('waTemplateName').value = name;
   if (!activeWaInvoiceId) return;
-  const res = await fetch(window.crmRoutes.invoice + '/' + activeWaInvoiceId + '/whatsapp-preview?template=' + encodeURIComponent(name), {
+  const token = ++waPreviewToken;
+  const invoiceId = activeWaInvoiceId;
+  const res = await fetch(window.crmRoutes.invoice + '/' + invoiceId + '/whatsapp-preview?template=' + encodeURIComponent(name), {
     headers: { 'Accept': 'application/json' }
   });
   const data = await res.json();
+  // A newer click (another invoice, or another template) may have fired
+  // while this request was in flight. Drop this response if so, or it
+  // would overwrite the correct message with a stale one.
+  if (token !== waPreviewToken) return;
   document.getElementById('waMessage').value = data.message;
 }
 
